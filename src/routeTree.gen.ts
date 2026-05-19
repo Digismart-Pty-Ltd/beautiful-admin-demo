@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RunningClubRouteImport } from './routes/running-club'
 import { Route as MembershipRouteImport } from './routes/membership'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as JoinRouteImport } from './routes/join'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -23,6 +25,16 @@ const RunningClubRoute = RunningClubRouteImport.update({
 const MembershipRoute = MembershipRouteImport.update({
   id: '/membership',
   path: '/membership',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JoinRoute = JoinRouteImport.update({
+  id: '/join',
+  path: '/join',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventsRoute = EventsRouteImport.update({
@@ -45,6 +57,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/events': typeof EventsRoute
+  '/join': typeof JoinRoute
+  '/login': typeof LoginRoute
   '/membership': typeof MembershipRoute
   '/running-club': typeof RunningClubRoute
 }
@@ -52,6 +66,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/events': typeof EventsRoute
+  '/join': typeof JoinRoute
+  '/login': typeof LoginRoute
   '/membership': typeof MembershipRoute
   '/running-club': typeof RunningClubRoute
 }
@@ -60,21 +76,47 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/events': typeof EventsRoute
+  '/join': typeof JoinRoute
+  '/login': typeof LoginRoute
   '/membership': typeof MembershipRoute
   '/running-club': typeof RunningClubRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/events' | '/membership' | '/running-club'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/events'
+    | '/join'
+    | '/login'
+    | '/membership'
+    | '/running-club'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/events' | '/membership' | '/running-club'
-  id: '__root__' | '/' | '/admin' | '/events' | '/membership' | '/running-club'
+  to:
+    | '/'
+    | '/admin'
+    | '/events'
+    | '/join'
+    | '/login'
+    | '/membership'
+    | '/running-club'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/events'
+    | '/join'
+    | '/login'
+    | '/membership'
+    | '/running-club'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   EventsRoute: typeof EventsRoute
+  JoinRoute: typeof JoinRoute
+  LoginRoute: typeof LoginRoute
   MembershipRoute: typeof MembershipRoute
   RunningClubRoute: typeof RunningClubRoute
 }
@@ -93,6 +135,20 @@ declare module '@tanstack/react-router' {
       path: '/membership'
       fullPath: '/membership'
       preLoaderRoute: typeof MembershipRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join': {
+      id: '/join'
+      path: '/join'
+      fullPath: '/join'
+      preLoaderRoute: typeof JoinRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/events': {
@@ -123,6 +179,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   EventsRoute: EventsRoute,
+  JoinRoute: JoinRoute,
+  LoginRoute: LoginRoute,
   MembershipRoute: MembershipRoute,
   RunningClubRoute: RunningClubRoute,
 }
