@@ -74,12 +74,17 @@ function RunningClub() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-4xl px-5 mt-24 text-center">
+      <section className="mx-auto max-w-4xl px-5 mt-24 pb-16 text-center">
         <h2 className="display text-5xl md:text-6xl">Join the club.</h2>
         <p className="mt-4 text-muted-foreground">Membership is free for the first month. After that — only if you've actually been showing up.</p>
-        <Link to="/events" className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
-          Book your first run
-        </Link>
+        <div className="mt-8 flex flex-wrap gap-3 justify-center">
+          <Link to="/join" className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
+            Join the club
+          </Link>
+          <Link to="/events" className="inline-flex items-center gap-2 rounded-full border border-border px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] hover:border-primary">
+            See events
+          </Link>
+        </div>
       </section>
 
       <SiteFooter />
