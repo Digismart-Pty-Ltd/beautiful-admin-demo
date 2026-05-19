@@ -1,9 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { events, type Event } from "@/lib/demo-data";
+import { useStore } from "@/lib/store";
 import { useState } from "react";
-import { Calendar, Clock, MapPin, Coffee, ChevronDown, Users, AlertTriangle, X, Check } from "lucide-react";
+import { toast } from "sonner";
+import { Calendar, Clock, MapPin, Coffee, ChevronDown, Users, AlertTriangle, X, Check, MapPinned, Lock } from "lucide-react";
+import type { Event } from "@/lib/demo-data";
 
 export const Route = createFileRoute("/events")({
   component: Events,
@@ -16,17 +18,18 @@ export const Route = createFileRoute("/events")({
 });
 
 function Events() {
+  const { state } = useStore();
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
       <section className="mx-auto max-w-7xl px-5 pt-16 pb-10">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">What's next</div>
         <h1 className="mt-3 display text-6xl md:text-8xl">Events.</h1>
-        <p className="mt-4 max-w-xl text-muted-foreground">The next four runs on the calendar. Book your spot, lace up, see you there.</p>
+        <p className="mt-4 max-w-xl text-muted-foreground">The next runs on the calendar. Book your spot, lace up, see you there.</p>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 grid gap-6 md:grid-cols-2">
-        {events.map((e) => <EventCard key={e.id} e={e} />)}
+      <section className="mx-auto max-w-7xl px-5 grid gap-6 md:grid-cols-2 pb-10">
+        {state.events.map((e) => <EventCard key={e.id} e={e} />)}
       </section>
 
       <SiteFooter />
@@ -35,11 +38,53 @@ function Events() {
 }
 
 function EventCard({ e }: { e: Event }) {
+  const { currentMember, currentOpen, signUpForEvent, myRegistrationFor, attendeesFor, cancelSignup, checkIn } = useStore();
   const [open, setOpen] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
   const [attendOpen, setAttendOpen] = useState(false);
-  const [signedUp, setSignedUp] = useState(false);
+  const [name, setName] = useState(currentMember?.name ?? currentOpen?.name ?? "");
+  const [contact, setContact] = useState("");
+  const [emergency, setEmergency] = useState("");
+
+  const myReg = myRegistrationFor(e.id);
+  const attendees = attendeesFor(e.id);
+  const blocked = e.membersOnly && !currentMember;
+
+  // race day window: 30 min before -> 2h after start
+  const start = new Date(`${e.date}T${e.time}`);
+  const now = new Date();
+  const windowOpen = now.getTime() >= start.getTime() - 30 * 60_000 && now.getTime() <= start.getTime() + 2 * 60 * 60_000;
+
+  function handleSignup(ev: React.FormEvent) {
+    ev.preventDefault();
+    const reg = signUpForEvent(e.id, { name, contact, emergency });
+    if (!reg) return toast.error(blocked ? "Members only event." : "Already signed up.");
+    toast.success(`You're in — ${e.title}`);
+    setSignupOpen(false);
+  }
+
+  function handleCheckIn() {
+    if (!("geolocation" in navigator)) {
+      const r = checkIn(e.id);
+      if (r?.checkedInAt) toast.success("Checked in!");
+      return;
+    }
+    toast.info("Verifying location…");
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        const r = checkIn(e.id);
+        if (r?.checkedInAt) toast.success("Checked in! Race counted.");
+        else toast.error("Could not check in.");
+      },
+      () => {
+        // permissive demo fallback
+        const r = checkIn(e.id);
+        if (r?.checkedInAt) toast.success("Checked in (location skipped).");
+      },
+      { timeout: 5000 }
+    );
+  }
 
   return (
     <article className="group relative overflow-hidden rounded-3xl border border-border bg-card">
@@ -68,49 +113,81 @@ function EventCard({ e }: { e: Event }) {
           <Info icon={Coffee} label="After-run" value={e.afterRunPlace} />
         </div>
 
-        {/* Disclaimer collapsible */}
-        <div className="mt-5 rounded-xl border border-border">
-          <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Indemnity & waiver
-            <ChevronDown size={14} className={`transition ${open ? "rotate-180" : ""}`} />
-          </button>
-          {open && (
-            <div className="px-4 pb-4 text-xs text-muted-foreground space-y-2 max-h-56 overflow-y-auto">
-              <p><strong className="text-foreground">Acknowledgement of Risk.</strong> Participation involves inherent risks including injury, illness or death.</p>
-              <p><strong className="text-foreground">Medical Fitness.</strong> I confirm I am medically fit to participate.</p>
-              <p><strong className="text-foreground">Indemnity.</strong> I indemnify Little Falls Runners NPC, its directors, organisers and volunteers from any and all claims.</p>
-              <p><strong className="text-foreground">Media consent.</strong> Photos and video may be used for community communication.</p>
-              <p>Governed by the laws of the Republic of South Africa.</p>
-            </div>
-          )}
-          <label className="flex items-center gap-2 px-4 pb-3 text-xs cursor-pointer">
-            <input type="checkbox" checked={accepted} onChange={(ev) => setAccepted(ev.target.checked)} className="accent-primary" />
-            <span>Accept all — I have read and agree to the waiver.</span>
-          </label>
-        </div>
+        {!myReg && (
+          <div className="mt-5 rounded-xl border border-border">
+            <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Indemnity & waiver
+              <ChevronDown size={14} className={`transition ${open ? "rotate-180" : ""}`} />
+            </button>
+            {open && (
+              <div className="px-4 pb-4 text-xs text-muted-foreground space-y-2 max-h-56 overflow-y-auto">
+                <p><strong className="text-foreground">Risk.</strong> Running involves inherent risks including injury, illness or death.</p>
+                <p><strong className="text-foreground">Medical Fitness.</strong> I confirm I am medically fit to participate.</p>
+                <p><strong className="text-foreground">Indemnity.</strong> I indemnify Little Falls Runners NPC, its directors, organisers and volunteers from any and all claims.</p>
+                <p><strong className="text-foreground">Media consent.</strong> Photos and video may be used for community communication.</p>
+                <p>Governed by the laws of the Republic of South Africa.</p>
+              </div>
+            )}
+            <label className="flex items-center gap-2 px-4 pb-3 text-xs cursor-pointer">
+              <input type="checkbox" checked={accepted} onChange={(ev) => setAccepted(ev.target.checked)} className="accent-primary" />
+              <span>Accept all — I have read and agree to the waiver.</span>
+            </label>
+          </div>
+        )}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            disabled={!accepted}
-            onClick={() => setSignupOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed">
-            {signedUp ? <><Check size={14} /> Booked</> : "Sign up"}
-          </button>
+          {blocked ? (
+            <Link to="/join" className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+              <Lock size={14} /> Members only — Join
+            </Link>
+          ) : myReg ? (
+            <>
+              {myReg.checkedInAt ? (
+                <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 text-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em]">
+                  <Check size={14} /> Checked in
+                </span>
+              ) : windowOpen ? (
+                <button onClick={handleCheckIn}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
+                  <MapPinned size={14} /> Check in
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                  <Check size={14} /> Booked
+                </span>
+              )}
+              <button onClick={() => { cancelSignup(myReg.id); toast("Booking cancelled."); }}
+                className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-destructive hover:text-destructive">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button disabled={!accepted} onClick={() => setSignupOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed">
+              Sign up
+            </button>
+          )}
           <button onClick={() => setAttendOpen(true)}
             className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-primary">
-            <Users size={14} /> Attendees ({e.attendees.length + (signedUp ? 1 : 0)})
+            <Users size={14} /> Attendees ({attendees.length})
           </button>
         </div>
+
+        {!currentMember && !currentOpen && !blocked && (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Tip: <Link to="/join" className="text-primary underline">Join</Link> or <Link to="/login" className="text-primary underline">log in</Link> to track races and earn rewards.
+          </p>
+        )}
       </div>
 
       {signupOpen && (
         <Modal onClose={() => setSignupOpen(false)}>
           <div className="display text-2xl">Confirm spot</div>
           <p className="text-sm text-muted-foreground mt-1">{e.title} · {new Date(e.date).toDateString()}</p>
-          <form onSubmit={(ev) => { ev.preventDefault(); setSignedUp(true); setSignupOpen(false); }} className="mt-5 space-y-3">
-            <Field label="Full name" defaultValue="Thandi Mokoena" />
-            <Field label="Contact number" defaultValue="082 123 4567" />
-            <Field label="Emergency contact" defaultValue="Sipho — 083 987 6543" />
+          <form onSubmit={handleSignup} className="mt-5 space-y-3">
+            <Field label="Full name" value={name} onChange={setName} required />
+            <Field label="Contact number" value={contact} onChange={setContact} required />
+            <Field label="Emergency contact" value={emergency} onChange={setEmergency} required />
             <button className="w-full rounded-full bg-primary px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground">Confirm booking</button>
           </form>
         </Modal>
@@ -120,16 +197,23 @@ function EventCard({ e }: { e: Event }) {
         <Modal onClose={() => setAttendOpen(false)}>
           <div className="display text-2xl">Who's running</div>
           <p className="text-sm text-muted-foreground mt-1">{e.title}</p>
-          <ul className="mt-5 divide-y divide-border">
-            {e.attendees.map((a) => (
-              <li key={a.name} className="flex items-center justify-between py-3 text-sm">
-                <span>{a.name}</span>
-                <span className={`text-[10px] uppercase tracking-[0.2em] ${a.openRunner ? "text-muted-foreground" : "text-primary"}`}>
-                  {a.openRunner ? "Open Runner" : a.tier}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {attendees.length === 0 ? (
+            <p className="mt-6 text-sm text-muted-foreground">No one signed up yet. Be the first.</p>
+          ) : (
+            <ul className="mt-5 divide-y divide-border max-h-72 overflow-y-auto">
+              {attendees.map((a) => (
+                <li key={a.id} className="flex items-center justify-between py-3 text-sm">
+                  <span className="flex items-center gap-2">
+                    {a.name}
+                    {a.checkedInAt && <span className="text-[10px] uppercase tracking-widest text-primary">· in</span>}
+                  </span>
+                  <span className={`text-[10px] uppercase tracking-[0.2em] ${a.openRunner ? "text-muted-foreground" : "text-primary"}`}>
+                    {a.openRunner ? "Open Runner" : a.tier ?? "Member"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Modal>
       )}
     </article>
@@ -145,11 +229,12 @@ function Info({ icon: Icon, label, value }: { icon: any; label: string; value: s
   );
 }
 
-function Field({ label, defaultValue }: { label: string; defaultValue?: string }) {
+function Field({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
   return (
     <label className="block">
       <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</span>
-      <input defaultValue={defaultValue} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <input value={value} required={required} onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" />
     </label>
   );
 }
