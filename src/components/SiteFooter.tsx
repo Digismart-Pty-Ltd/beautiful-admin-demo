@@ -1,33 +1,42 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
+import { Home, CalendarDays, Trophy, User } from "lucide-react";
+
+const tabs = [
+  { to: "/", label: "Home", icon: Home, exact: true },
+  { to: "/events", label: "Runs", icon: CalendarDays },
+  { to: "/running-club", label: "Club", icon: User },
+  { to: "/membership", label: "Rewards", icon: Trophy },
+];
 
 export function SiteFooter() {
+  const { pathname } = useLocation();
   return (
-    <footer className="mt-32 border-t border-border bg-card/40">
-      <div className="mx-auto max-w-7xl px-5 py-12 grid gap-10 md:grid-cols-3">
-        <div>
-          <div className="display text-2xl">WAVEN HARPER<span className="text-primary">.</span></div>
-          <p className="mt-3 text-sm text-muted-foreground max-w-xs">
-            Personal training, community running, and a rewards system that actually means something.
-          </p>
+    <>
+      {/* spacer so content isn't covered */}
+      <div aria-hidden className="h-28" />
+      <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
+        <div className="mx-auto max-w-md px-4 pb-4 pointer-events-auto">
+          <div className="rounded-2xl border border-border bg-card/90 backdrop-blur-xl shadow-glow px-2 py-2 grid grid-cols-4 gap-1">
+            {tabs.map((t) => {
+              const active = t.exact ? pathname === t.to : pathname.startsWith(t.to);
+              const Icon = t.icon;
+              return (
+                <Link
+                  key={t.to}
+                  to={t.to}
+                  className={`relative flex flex-col items-center justify-center gap-1 rounded-xl py-2 transition ${
+                    active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon size={18} strokeWidth={active ? 2.4 : 1.8} />
+                  <span className="text-[10px] uppercase tracking-[0.18em] font-semibold">{t.label}</span>
+                  {active && <span className="absolute -top-1 h-1 w-6 rounded-full bg-primary" />}
+                </Link>
+              );
+            })}
+          </div>
         </div>
-        <div className="text-sm">
-          <div className="display text-xs tracking-[0.3em] text-muted-foreground mb-3">Explore</div>
-          <ul className="space-y-2">
-            <li><Link to="/" className="hover:text-primary">Home</Link></li>
-            <li><Link to="/running-club" className="hover:text-primary">Little Falls Runners</Link></li>
-            <li><Link to="/events" className="hover:text-primary">Events</Link></li>
-            <li><Link to="/membership" className="hover:text-primary">Membership & Rewards</Link></li>
-          </ul>
-        </div>
-        <div className="text-sm">
-          <div className="display text-xs tracking-[0.3em] text-muted-foreground mb-3">Contact</div>
-          <p className="text-muted-foreground">Clubhouse, Wilgerood Rd<br />Little Falls, Roodepoort</p>
-          <p className="mt-3 text-muted-foreground">hello@wavenharper.fit</p>
-        </div>
-      </div>
-      <div className="border-t border-border py-5 text-center text-xs uppercase tracking-[0.3em] text-muted-foreground">
-        © {new Date().getFullYear()} Waven Harper Fitness · No one is chasing us
-      </div>
-    </footer>
+      </nav>
+    </>
   );
 }

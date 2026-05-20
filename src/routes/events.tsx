@@ -22,13 +22,13 @@ function Events() {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
-      <section className="mx-auto max-w-7xl px-5 pt-16 pb-10">
+      <section className="mx-auto max-w-md px-5 pt-16 pb-10">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">What's next</div>
-        <h1 className="mt-3 display text-6xl md:text-8xl">Events.</h1>
+        <h1 className="mt-3 display text-4xl ">Events.</h1>
         <p className="mt-4 max-w-xl text-muted-foreground">The next runs on the calendar. Book your spot, lace up, see you there.</p>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 grid gap-6 md:grid-cols-2 pb-10">
+      <section className="mx-auto max-w-md px-5 grid gap-6  pb-10">
         {state.events.map((e) => <EventCard key={e.id} e={e} />)}
       </section>
 

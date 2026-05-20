@@ -1,164 +1,218 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { pricing, WHATSAPP_NUMBER, events } from "@/lib/demo-data";
+import { pricing, WHATSAPP_NUMBER } from "@/lib/demo-data";
+import { useStore } from "@/lib/store";
 import hero from "@/assets/hero-runners.jpg";
-import gym from "@/assets/hero-gym.jpg";
 import community from "@/assets/community.jpg";
-import wh from "@/assets/wh-logo.jpeg";
 import lfr from "@/assets/lfr-logo.jpeg";
-import { ArrowUpRight, Check, Dumbbell, MapPin, Trophy, Users } from "lucide-react";
+import {
+  ArrowUpRight, Check, Dumbbell, Flame, MapPin, Sparkles, Trophy, Users, Clock, ChevronRight,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
+  const { state, currentMember, currentOpen } = useStore();
   const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Hi Waven — I'd like to sign up for personal training.")}`;
+  const upcoming = state.events.slice(0, 4);
+  const name = (currentMember?.name ?? currentOpen?.name ?? "Runner").split(" ")[0];
+  const races = currentMember?.races ?? 0;
+  const tier = currentMember?.tier ?? "Guest";
+
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      {/* HERO */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0">
-          <img src={hero} alt="" className="h-full w-full object-cover opacity-50" />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
-        </div>
-        <div className="relative mx-auto max-w-7xl px-5 pt-20 pb-32 md:pt-32 md:pb-44">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/40 px-4 py-1.5 text-[10px] uppercase tracking-[0.3em] text-muted-foreground backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-            Little Falls · Roodepoort
-          </div>
-          <h1 className="mt-6 display text-[14vw] md:text-[8rem] leading-[0.85] text-foreground">
-            Train.<br />Run.<br /><span className="text-gradient-brand">Rise.</span>
-          </h1>
-          <p className="mt-6 max-w-xl text-base md:text-lg text-muted-foreground">
-            Personal training with Waven Harper and the <span className="marker text-primary">No One Is Chasing Us</span> running crew. Show up. Sign in. Earn it.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <a href={waLink} target="_blank" rel="noreferrer"
-               className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow hover:opacity-95">
-              Sign up — WhatsApp <ArrowUpRight size={16} />
-            </a>
-            <Link to="/events" className="inline-flex items-center gap-2 rounded-full border border-border bg-background/40 px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] backdrop-blur hover:border-primary">
-              See next runs
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* QUICK TILES */}
-      <section className="mx-auto max-w-7xl px-5 -mt-20 relative z-10">
-        <div className="grid gap-4 md:grid-cols-4">
-          {[
-            { icon: Dumbbell, label: "Personal Training", to: "/", note: "1:1 with Waven" },
-            { icon: Users, label: "Running Club", to: "/running-club", note: "Little Falls Runners" },
-            { icon: MapPin, label: "Events", to: "/events", note: "Next 4 runs" },
-            { icon: Trophy, label: "Rewards", to: "/membership", note: "Bronze → Platinum" },
-          ].map((t) => (
-            <Link key={t.label} to={t.to}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 hover:border-primary transition">
-              <t.icon className="text-primary" size={22} />
-              <div className="mt-6 display text-lg">{t.label}</div>
-              <div className="text-xs text-muted-foreground">{t.note}</div>
-              <ArrowUpRight className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition text-primary" size={18} />
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* SPLIT - Mission */}
-      <section className="mx-auto max-w-7xl px-5 mt-32 grid gap-12 md:grid-cols-2 items-center">
-        <div className="relative aspect-[4/5] overflow-hidden rounded-3xl grain">
-          <img src={gym} alt="Gym" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
-          <img src={wh} alt="WH" className="absolute bottom-6 left-6 h-16 w-16 rounded-xl ring-2 ring-primary/60" />
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-[0.3em] text-primary">Our Mission</div>
-          <h2 className="mt-3 display text-5xl md:text-6xl leading-none">Built for runners who turn up.</h2>
-          <p className="mt-6 text-muted-foreground text-lg">
-            Waven Harper Fitness is a coaching practice and community club. We believe in the boring, beautiful work — the early alarms, the long Sunday, the slow build to fast.
-          </p>
-          <ul className="mt-8 space-y-3 text-sm">
-            {["1:1 and small-group personal training", "Periodised programmes you can actually follow", "A real club, not a hashtag", "Rewards for the work, not the talk"].map((x) => (
-              <li key={x} className="flex items-start gap-3"><Check size={18} className="text-primary mt-0.5" /> <span>{x}</span></li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      {/* PRICING */}
-      <section className="mx-auto max-w-7xl px-5 mt-32">
-        <div className="flex items-end justify-between flex-wrap gap-4">
+      <main className="mx-auto max-w-md px-5 pt-4 pb-2">
+        {/* Greeting */}
+        <div className="flex items-end justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-primary">Personal Training</div>
-            <h2 className="mt-2 display text-5xl md:text-6xl">Pick your weight.</h2>
+            <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Good run, runner</div>
+            <h1 className="mt-1 display text-4xl leading-none">
+              Hey <span className="text-gradient-brand">{name}.</span>
+            </h1>
           </div>
-          <a href={waLink} target="_blank" rel="noreferrer" className="text-sm uppercase tracking-[0.2em] text-primary hover:underline">Chat on WhatsApp →</a>
+          <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.2em] text-primary">
+            <Flame size={13} /> {races} runs
+          </div>
         </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-3">
-          {pricing.map((p) => (
-            <div key={p.name}
-              className={`relative rounded-3xl border p-7 ${p.highlight ? "border-primary bg-gradient-to-b from-primary/10 to-card shadow-glow" : "border-border bg-card"}`}>
-              {p.highlight && <div className="absolute -top-3 left-7 rounded-full bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground">Most popular</div>}
-              <div className="display text-2xl">{p.name}</div>
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="display text-5xl">R{p.price}</span>
-                <span className="text-muted-foreground text-sm">{p.period}</span>
+
+        {/* Hero card */}
+        <section className="relative mt-5 overflow-hidden rounded-3xl border border-border shadow-glow">
+          <img src={hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+          <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/40 to-primary/30" />
+          <div className="relative p-6 pt-7 min-h-[260px] flex flex-col justify-between">
+            <div>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/40 px-3 py-1 text-[9px] uppercase tracking-[0.3em] backdrop-blur">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                Little Falls · Roodepoort
               </div>
-              <ul className="mt-6 space-y-3 text-sm">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2"><Check size={16} className="text-primary mt-0.5" /> {f}</li>
-                ))}
-              </ul>
+              <div className="mt-5 display text-[44px] leading-[0.9]">
+                Train.<br />Run.<br /><span className="text-gradient-brand">Rise.</span>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground max-w-[220px]">
+                Show up. Sign in. Earn it. The <span className="marker text-primary">no one is chasing us</span> crew is loading.
+              </p>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <Link to="/events"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-foreground">
+                Next runs <ArrowUpRight size={13} />
+              </Link>
               <a href={waLink} target="_blank" rel="noreferrer"
-                 className={`mt-8 inline-flex w-full justify-center rounded-full px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] transition ${p.highlight ? "bg-primary text-primary-foreground hover:opacity-90" : "border border-border hover:border-primary"}`}>
-                Sign up
+                 className="rounded-full border border-border bg-background/40 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] backdrop-blur">
+                PT
               </a>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+        </section>
 
-      {/* NEXT RUNS PREVIEW */}
-      <section className="mx-auto max-w-7xl px-5 mt-32">
-        <div className="flex items-end justify-between flex-wrap gap-4">
-          <h2 className="display text-5xl md:text-6xl">Next on the road.</h2>
-          <Link to="/events" className="text-sm uppercase tracking-[0.2em] text-primary hover:underline">All events →</Link>
-        </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-          {events.slice(0, 4).map((e) => (
-            <Link key={e.id} to="/events" className="group relative overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="relative aspect-[4/5]">
-                <img src={e.image} alt={e.title} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" loading="lazy" />
-                <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
-                {e.membersOnly && <span className="absolute top-3 left-3 rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-foreground">Members</span>}
-                <div className="absolute bottom-0 p-4">
-                  <div className="text-[10px] uppercase tracking-[0.3em] text-primary">{new Date(e.date).toDateString().slice(0, 10)} · {e.time}</div>
-                  <div className="display text-lg mt-1 leading-tight">{e.title}</div>
-                </div>
-              </div>
+        {/* Quick stats / tier strip */}
+        <section className="mt-5 grid grid-cols-3 gap-2.5">
+          <Stat icon={Trophy} label="Tier" value={tier} />
+          <Stat icon={Sparkles} label="Rewards" value={String(state.rewards.length)} />
+          <Stat icon={Users} label="Crew" value={String(state.members.length + state.openRunners.length)} />
+        </section>
+
+        {/* Action chips */}
+        <section className="mt-6">
+          <SectionLabel>Quick actions</SectionLabel>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Action icon={Dumbbell} title="Personal Training" sub="1:1 with Waven" to="/" highlight />
+            <Action icon={MapPin} title="Find a Run" sub="Open this week" to="/events" />
+            <Action icon={Users} title="Little Falls" sub="The club" to="/running-club" />
+            <Action icon={Trophy} title="My Rewards" sub="Bronze → Platinum" to="/membership" />
+          </div>
+        </section>
+
+        {/* Next runs (horizontal scroll) */}
+        <section className="mt-7">
+          <div className="flex items-end justify-between">
+            <SectionLabel>Next on the road</SectionLabel>
+            <Link to="/events" className="text-[10px] uppercase tracking-[0.2em] text-primary flex items-center gap-0.5">
+              All <ChevronRight size={12} />
             </Link>
-          ))}
-        </div>
-      </section>
+          </div>
+          <div className="mt-3 -mx-5 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-3 px-5 pb-2 min-w-min">
+              {upcoming.map((e) => (
+                <Link to="/events" key={e.id}
+                  className="group relative w-[220px] shrink-0 overflow-hidden rounded-2xl border border-border bg-card">
+                  <div className="relative h-[150px]">
+                    <img src={e.image} alt={e.title} loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-105 duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
+                    {e.membersOnly && (
+                      <span className="absolute top-2.5 left-2.5 rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-primary-foreground">
+                        Members
+                      </span>
+                    )}
+                    <span className="absolute top-2.5 right-2.5 rounded-full bg-background/70 backdrop-blur px-2 py-0.5 text-[9px] uppercase tracking-widest border border-border">
+                      {e.distanceKm}K
+                    </span>
+                  </div>
+                  <div className="p-3">
+                    <div className="text-[9px] uppercase tracking-[0.25em] text-primary flex items-center gap-1">
+                      <Clock size={10} /> {new Date(e.date).toDateString().slice(4, 10)} · {e.time}
+                    </div>
+                    <div className="mt-1 display text-[15px] leading-tight line-clamp-2">{e.title}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
 
-      {/* COMMUNITY */}
-      <section className="mt-32 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <img src={community} alt="" className="h-full w-full object-cover opacity-40" loading="lazy" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
-        </div>
-        <div className="relative mx-auto max-w-7xl px-5 py-24 md:py-36">
-          <img src={lfr} alt="LFR" className="h-20 w-20 rounded-full ring-2 ring-primary mb-6" />
-          <div className="marker text-primary text-2xl md:text-4xl">"No one is chasing us."</div>
-          <h2 className="mt-3 display text-5xl md:text-7xl max-w-3xl">A club for runners, not a brand for posters.</h2>
-          <Link to="/running-club" className="mt-10 inline-flex items-center gap-2 rounded-full bg-foreground px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.2em] text-background hover:opacity-90">
-            Meet the crew
-          </Link>
-        </div>
-      </section>
+        {/* Pricing */}
+        <section className="mt-8">
+          <SectionLabel>Personal Training</SectionLabel>
+          <h2 className="mt-1 display text-2xl">Pick your weight.</h2>
+          <div className="mt-4 space-y-3">
+            {pricing.map((p) => (
+              <div key={p.name}
+                className={`relative rounded-2xl border p-5 ${
+                  p.highlight
+                    ? "border-primary bg-gradient-to-br from-primary/12 via-card to-card shadow-glow"
+                    : "border-border bg-card"
+                }`}>
+                {p.highlight && (
+                  <span className="absolute -top-2.5 left-5 rounded-full bg-primary px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-primary-foreground">
+                    Most popular
+                  </span>
+                )}
+                <div className="flex items-baseline justify-between">
+                  <div className="display text-lg">{p.name}</div>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className="display text-3xl">R{p.price}</span>
+                    <span className="text-[10px] text-muted-foreground">{p.period}</span>
+                  </div>
+                </div>
+                <ul className="mt-3 space-y-1.5 text-[12px]">
+                  {p.features.slice(0, 3).map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-muted-foreground">
+                      <Check size={13} className="text-primary mt-0.5 shrink-0" /> {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href={waLink} target="_blank" rel="noreferrer"
+                  className={`mt-4 inline-flex w-full justify-center rounded-full px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+                    p.highlight ? "bg-primary text-primary-foreground" : "border border-border"
+                  }`}>
+                  Sign up
+                </a>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Community */}
+        <section className="mt-8 relative overflow-hidden rounded-3xl border border-border">
+          <img src={community} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" loading="lazy" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-background via-background/70 to-primary/20" />
+          <div className="relative p-6">
+            <img src={lfr} alt="LFR" className="h-12 w-12 rounded-full ring-2 ring-primary mb-3" />
+            <div className="marker text-primary text-lg">"No one is chasing us."</div>
+            <h2 className="mt-1 display text-2xl leading-tight">A club for runners,<br />not a brand for posters.</h2>
+            <Link to="/running-club"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-foreground px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-background">
+              Meet the crew <ArrowUpRight size={13} />
+            </Link>
+          </div>
+        </section>
+      </main>
 
       <SiteFooter />
     </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-semibold">{children}</div>;
+}
+
+function Stat({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <Icon size={14} className="text-primary" />
+      <div className="mt-2 text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+      <div className="display text-base leading-none mt-1">{value}</div>
+    </div>
+  );
+}
+
+function Action({ icon: Icon, title, sub, to, highlight }: { icon: any; title: string; sub: string; to: string; highlight?: boolean }) {
+  return (
+    <Link to={to}
+      className={`group relative overflow-hidden rounded-2xl border p-4 min-h-[110px] flex flex-col justify-between ${
+        highlight ? "border-primary/60 bg-gradient-to-br from-primary/15 to-card" : "border-border bg-card"
+      } hover:border-primary transition`}>
+      <Icon size={20} className="text-primary" />
+      <div>
+        <div className="display text-sm leading-tight">{title}</div>
+        <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+      </div>
+      <ArrowUpRight size={14} className="absolute right-3 top-3 text-muted-foreground group-hover:text-primary transition" />
+    </Link>
   );
 }

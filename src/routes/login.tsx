@@ -30,7 +30,7 @@ function Login() {
       <SiteHeader />
       <section className="mx-auto max-w-md px-5 pt-20">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Welcome back</div>
-        <h1 className="mt-3 display text-5xl">Log in.</h1>
+        <h1 className="mt-3 display text-3xl">Log in.</h1>
         <form onSubmit={submit} className="mt-8 rounded-3xl border border-border bg-card p-6 space-y-4">
           <label className="block">
             <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Email</span>

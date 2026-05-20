@@ -30,11 +30,11 @@ function Membership() {
     return (
       <div className="min-h-screen bg-background">
         <SiteHeader />
-        <section className="mx-auto max-w-2xl px-5 pt-24 text-center">
+        <section className="mx-auto max-w-md px-5 pt-24 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <Lock size={11} className="text-primary" /> Members only
           </div>
-          <h1 className="mt-6 display text-5xl md:text-7xl">{currentOpen ? "Upgrade to Member" : "Join to unlock."}</h1>
+          <h1 className="mt-6 display text-3xl ">{currentOpen ? "Upgrade to Member" : "Join to unlock."}</h1>
           <p className="mt-4 text-muted-foreground">
             {currentOpen
               ? `Hey ${currentOpen.name.split(" ")[0]} — Open Runners can join the easy runs, but the tier system, rewards and Members-only events live behind a full club registration.`
@@ -63,33 +63,33 @@ function Membership() {
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      <section className="mx-auto max-w-7xl px-5 pt-16 pb-8">
+      <section className="mx-auto max-w-md px-5 pt-16 pb-8">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Member Dashboard</div>
-        <h1 className="mt-3 display text-5xl md:text-7xl">Hey {me.name.split(" ")[0]}.</h1>
+        <h1 className="mt-3 display text-3xl ">Hey {me.name.split(" ")[0]}.</h1>
         <p className="mt-3 text-muted-foreground">Here's where you stand.</p>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 grid gap-5 md:grid-cols-3">
+      <section className="mx-auto max-w-md px-5 grid gap-5 ">
         <div className="rounded-3xl border border-border bg-card p-7">
           <Trophy className="text-primary" />
           <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">Current tier</div>
-          <div className="mt-2 display text-5xl" style={{ color: tierMeta[me.tier].color }}>{me.tier}</div>
+          <div className="mt-2 display text-3xl" style={{ color: tierMeta[me.tier].color }}>{me.tier}</div>
           <div className="mt-1 text-xs text-muted-foreground">{needed === 0 ? "Top tier reached" : `${needed} more races to ${next}`}</div>
         </div>
         <div className="rounded-3xl border border-border bg-card p-7">
           <Calendar className="text-primary" />
           <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">Races this year</div>
-          <div className="mt-2 display text-6xl">{me.races}</div>
+          <div className="mt-2 display text-4xl">{me.races}</div>
         </div>
         <div className="rounded-3xl border border-border bg-card p-7">
           <Gift className="text-primary" />
           <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">Rewards available</div>
-          <div className="mt-2 display text-6xl">{myRewards.length - redeemed.size}</div>
+          <div className="mt-2 display text-4xl">{myRewards.length - redeemed.size}</div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 mt-16">
-        <h2 className="display text-3xl md:text-4xl">Tier progress</h2>
+      <section className="mx-auto max-w-md px-5 mt-16">
+        <h2 className="display text-3xl ">Tier progress</h2>
         <div className="mt-6 rounded-3xl border border-border bg-card p-8">
           <div className="relative h-2 w-full rounded-full bg-secondary overflow-hidden">
             <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-accent" style={{ width: `${progress}%` }} />
@@ -107,12 +107,12 @@ function Membership() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 mt-16">
-        <h2 className="display text-3xl md:text-4xl">Your rewards</h2>
+      <section className="mx-auto max-w-md px-5 mt-16">
+        <h2 className="display text-3xl ">Your rewards</h2>
         {myRewards.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">Nothing in your tier yet. Keep stacking races.</p>
         ) : (
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="mt-6 grid gap-4 ">
             {myRewards.map((r) => {
               const isRedeemed = redeemed.has(r.id);
               return (
@@ -139,8 +139,8 @@ function Membership() {
         )}
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 mt-16 pb-10">
-        <h2 className="display text-3xl md:text-4xl">Your upcoming runs</h2>
+      <section className="mx-auto max-w-md px-5 mt-16 pb-10">
+        <h2 className="display text-3xl ">Your upcoming runs</h2>
         {myUpcoming.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">No bookings yet. <Link to="/events" className="text-primary underline">See events</Link>.</p>
         ) : (

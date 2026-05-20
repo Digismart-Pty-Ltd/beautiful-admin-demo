@@ -57,7 +57,7 @@ function Join() {
 
       <section className="mx-auto max-w-3xl px-5 pt-14 pb-6">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Get on the start line</div>
-        <h1 className="mt-3 display text-5xl md:text-7xl">Join.</h1>
+        <h1 className="mt-3 display text-3xl ">Join.</h1>
         <p className="mt-4 text-muted-foreground">
           Already registered? <Link to="/login" className="text-primary underline">Log in</Link>.
         </p>
@@ -74,7 +74,7 @@ function Join() {
         </div>
 
         <form onSubmit={submit} className="mt-6 rounded-3xl border border-border bg-card p-6 space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid  gap-4">
             <Field label="Full name" value={name} onChange={setName} required />
             <Field label="Email" type="email" value={email} onChange={setEmail} required />
             {tab === "member" && <>
