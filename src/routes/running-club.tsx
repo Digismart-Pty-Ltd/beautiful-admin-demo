@@ -26,11 +26,11 @@ function RunningClub() {
           <img src={community} alt="" className="h-full w-full object-cover opacity-30" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/60 to-background" />
         </div>
-        <div className="relative mx-auto max-w-7xl px-5 pt-20 pb-20 grid md:grid-cols-[auto,1fr] gap-10 items-center">
+        <div className="relative mx-auto max-w-md px-5 pt-20 pb-20 grid md:grid-cols-[auto,1fr] gap-10 items-center">
           <img src={lfr} alt="Little Falls Runners" className="h-44 w-44 md:h-56 md:w-56 rounded-full ring-2 ring-primary shadow-glow" />
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-primary">Community Club</div>
-            <h1 className="mt-3 display text-6xl md:text-8xl leading-[0.9]">Little Falls<br />Runners.</h1>
+            <h1 className="mt-3 display text-6xl  leading-[0.9]">Little Falls<br />Runners.</h1>
             <p className="marker mt-4 text-primary text-3xl">No one is chasing us.</p>
           </div>
         </div>
@@ -44,7 +44,7 @@ function RunningClub() {
         </p>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 mt-16 grid gap-4 md:grid-cols-3">
+      <section className="mx-auto max-w-md px-5 mt-16 grid gap-4 ">
         {[
           { k: "120+", v: "Active members" },
           { k: "4×", v: "Group runs / week" },
@@ -57,9 +57,9 @@ function RunningClub() {
         ))}
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 mt-20">
-        <h2 className="display text-4xl md:text-5xl">Upcoming runs</h2>
-        <div className="mt-8 grid gap-5 md:grid-cols-2">
+      <section className="mx-auto max-w-md px-5 mt-20">
+        <h2 className="display text-4xl ">Upcoming runs</h2>
+        <div className="mt-8 grid gap-5 ">
           {events.slice(0, 4).map((e) => (
             <div key={e.id} className="flex gap-5 rounded-2xl border border-border bg-card p-4">
               <img src={e.image} alt={e.title} className="h-28 w-28 rounded-xl object-cover" loading="lazy" />
@@ -75,7 +75,7 @@ function RunningClub() {
       </section>
 
       <section className="mx-auto max-w-4xl px-5 mt-24 pb-16 text-center">
-        <h2 className="display text-5xl md:text-6xl">Join the club.</h2>
+        <h2 className="display text-5xl ">Join the club.</h2>
         <p className="mt-4 text-muted-foreground">Membership is free for the first month. After that — only if you've actually been showing up.</p>
         <div className="mt-8 flex flex-wrap gap-3 justify-center">
           <Link to="/join" className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
