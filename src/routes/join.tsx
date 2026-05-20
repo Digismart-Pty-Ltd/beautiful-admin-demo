@@ -57,7 +57,7 @@ function Join() {
 
       <section className="mx-auto max-w-3xl px-5 pt-14 pb-6">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Get on the start line</div>
-        <h1 className="mt-3 display text-5xl ">Join.</h1>
+        <h1 className="mt-3 display text-3xl ">Join.</h1>
         <p className="mt-4 text-muted-foreground">
           Already registered? <Link to="/login" className="text-primary underline">Log in</Link>.
         </p>

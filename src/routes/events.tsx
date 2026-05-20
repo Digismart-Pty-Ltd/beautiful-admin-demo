@@ -24,7 +24,7 @@ function Events() {
       <SiteHeader />
       <section className="mx-auto max-w-md px-5 pt-16 pb-10">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">What's next</div>
-        <h1 className="mt-3 display text-6xl ">Events.</h1>
+        <h1 className="mt-3 display text-4xl ">Events.</h1>
         <p className="mt-4 max-w-xl text-muted-foreground">The next runs on the calendar. Book your spot, lace up, see you there.</p>
       </section>
 

@@ -30,7 +30,7 @@ function RunningClub() {
           <img src={lfr} alt="Little Falls Runners" className="h-44 w-44 md:h-56 md:w-56 rounded-full ring-2 ring-primary shadow-glow" />
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-primary">Community Club</div>
-            <h1 className="mt-3 display text-6xl  leading-[0.9]">Little Falls<br />Runners.</h1>
+            <h1 className="mt-3 display text-4xl  leading-[0.9]">Little Falls<br />Runners.</h1>
             <p className="marker mt-4 text-primary text-3xl">No one is chasing us.</p>
           </div>
         </div>
@@ -51,7 +51,7 @@ function RunningClub() {
           { k: "0", v: "People chasing us" },
         ].map((s) => (
           <div key={s.v} className="rounded-2xl border border-border bg-card p-8 text-center">
-            <div className="display text-6xl text-primary">{s.k}</div>
+            <div className="display text-4xl text-primary">{s.k}</div>
             <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">{s.v}</div>
           </div>
         ))}
@@ -75,7 +75,7 @@ function RunningClub() {
       </section>
 
       <section className="mx-auto max-w-4xl px-5 mt-24 pb-16 text-center">
-        <h2 className="display text-5xl ">Join the club.</h2>
+        <h2 className="display text-3xl ">Join the club.</h2>
         <p className="mt-4 text-muted-foreground">Membership is free for the first month. After that — only if you've actually been showing up.</p>
         <div className="mt-8 flex flex-wrap gap-3 justify-center">
           <Link to="/join" className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
