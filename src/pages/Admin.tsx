@@ -1,23 +1,19 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "@/lib/store";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart3, Calendar, Gift, LogOut, Users, Shield, Plus, Download, Trash2, Pencil, X, Check,
 } from "lucide-react";
 import type { Event, Reward, Tier } from "@/lib/demo-data";
 
-export const Route = createFileRoute("/admin")({
-  component: Admin,
-  head: () => ({ meta: [{ title: "Admin · Waven Harper Fitness" }, { name: "robots", content: "noindex" }] }),
-});
-
 type Tab = "overview" | "events" | "members" | "rewards";
 
-function Admin() {
+export default function Admin() {
   const { currentUser, loginAdmin, logout } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("overview");
+  useEffect(() => { document.title = "Admin · Waven Harper Fitness"; }, []);
 
   if (currentUser?.kind !== "admin") {
     return (
@@ -59,7 +55,7 @@ function Admin() {
             </button>
           ))}
         </nav>
-        <button onClick={() => { logout(); navigate({ to: "/" }); }}
+        <button onClick={() => { logout(); navigate("/"); }}
           className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground hover:text-primary">
           <LogOut size={14} /> Exit admin
         </button>

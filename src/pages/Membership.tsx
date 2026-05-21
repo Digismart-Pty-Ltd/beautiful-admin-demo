@@ -1,20 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { useStore, nextTierInfo } from "@/lib/store";
 import { toast } from "sonner";
 import { Award, Calendar, Gift, Lock, Trophy } from "lucide-react";
 import type { Tier } from "@/lib/demo-data";
-
-export const Route = createFileRoute("/membership")({
-  component: Membership,
-  head: () => ({
-    meta: [
-      { title: "Membership & Rewards — Waven Harper Fitness" },
-      { name: "description", content: "Track your races, climb the tiers, redeem rewards." },
-    ],
-  }),
-});
+import { useEffect } from "react";
 
 const tierMeta: Record<Tier, { color: string; need: number }> = {
   Bronze: { color: "var(--bronze)", need: 0 },
@@ -23,8 +14,9 @@ const tierMeta: Record<Tier, { color: string; need: number }> = {
   Platinum: { color: "var(--platinum)", need: 36 },
 };
 
-function Membership() {
+export default function Membership() {
   const { currentMember, currentOpen, state, redeem, myRedemptions } = useStore();
+  useEffect(() => { document.title = "Membership & Rewards — Waven Harper Fitness"; }, []);
 
   if (!currentMember) {
     return (

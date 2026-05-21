@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation } from "react-router-dom";
 import { Home, CalendarDays, Trophy, User } from "lucide-react";
 
 const tabs = [
@@ -12,7 +12,6 @@ export function SiteFooter() {
   const { pathname } = useLocation();
   return (
     <>
-      {/* spacer so content isn't covered (mobile only) */}
       <div aria-hidden className="h-28 md:hidden" />
       <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none md:hidden">
         <div className="mx-auto max-w-md px-4 pb-4 pointer-events-auto">
@@ -21,13 +20,10 @@ export function SiteFooter() {
               const active = t.exact ? pathname === t.to : pathname.startsWith(t.to);
               const Icon = t.icon;
               return (
-                <Link
-                  key={t.to}
-                  to={t.to}
+                <Link key={t.to} to={t.to}
                   className={`relative flex flex-col items-center justify-center gap-1 rounded-xl py-2 transition ${
                     active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
+                  }`}>
                   <Icon size={18} strokeWidth={active ? 2.4 : 1.8} />
                   <span className="text-[10px] uppercase tracking-[0.18em] font-semibold">{t.label}</span>
                   {active && <span className="absolute -top-1 h-1 w-6 rounded-full bg-primary" />}

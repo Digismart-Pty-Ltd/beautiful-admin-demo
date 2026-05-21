@@ -1,4 +1,4 @@
-import { Link, useNavigate, useLocation } from "@tanstack/react-router";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Bell, LogOut } from "lucide-react";
 import wh from "@/assets/wh-logo.jpeg";
 import { useStore } from "@/lib/store";
@@ -16,11 +16,7 @@ export function SiteHeader() {
   const { pathname } = useLocation();
   const loggedIn = currentMember || currentOpen;
   const name = currentMember?.name ?? currentOpen?.name;
-  const initials = (name ?? "Guest")
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("");
+  const initials = (name ?? "Guest").split(" ").map((s) => s[0]).slice(0, 2).join("");
 
   return (
     <header className="sticky top-0 z-40 bg-background/85 backdrop-blur-xl border-b border-border/60">
@@ -33,18 +29,14 @@ export function SiteHeader() {
           </div>
         </Link>
 
-        {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
           {navLinks.map((l) => {
             const active = l.exact ? pathname === l.to : pathname.startsWith(l.to);
             return (
-              <Link
-                key={l.to}
-                to={l.to as any}
+              <Link key={l.to} to={l.to}
                 className={`px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.25em] transition ${
                   active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
+                }`}>
                 {l.label}
               </Link>
             );
@@ -62,7 +54,7 @@ export function SiteHeader() {
                 className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center text-[11px] font-bold text-primary-foreground uppercase">
                 {initials}
               </Link>
-              <button onClick={() => { logout(); navigate({ to: "/" }); }} aria-label="Log out"
+              <button onClick={() => { logout(); navigate("/"); }} aria-label="Log out"
                 className="h-9 w-9 md:h-10 md:w-10 grid place-items-center rounded-full border border-border text-muted-foreground hover:text-primary">
                 <LogOut size={14} />
               </button>

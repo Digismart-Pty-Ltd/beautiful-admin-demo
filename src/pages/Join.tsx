@@ -1,15 +1,10 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useNavigate, Link } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { toast } from "sonner";
 import { Check, ShieldCheck } from "lucide-react";
-
-export const Route = createFileRoute("/join")({
-  component: Join,
-  head: () => ({ meta: [{ title: "Join — Waven Harper Fitness" }] }),
-});
 
 const waiverPoints = [
   ["Acknowledgement of Risk", "I acknowledge participation involves inherent risks including injury, illness or death."],
@@ -21,7 +16,7 @@ const waiverPoints = [
   ["Governing Law", "This agreement is governed by the laws of the Republic of South Africa."],
 ] as const;
 
-function Join() {
+export default function Join() {
   const nav = useNavigate();
   const { registerMember, registerOpenRunner } = useStore();
   const [tab, setTab] = useState<"member" | "open">("member");
@@ -32,6 +27,7 @@ function Join() {
   const [emergency, setEmergency] = useState("");
   const [checks, setChecks] = useState<boolean[]>(Array(waiverPoints.length).fill(false));
   const allChecked = checks.every(Boolean);
+  useEffect(() => { document.title = "Join — Waven Harper Fitness"; }, []);
 
   function setAll(v: boolean) { setChecks(Array(waiverPoints.length).fill(v)); }
 
@@ -42,12 +38,12 @@ function Join() {
     if (tab === "member") {
       registerMember({ name, email });
       toast.success(`Welcome, ${name.split(" ")[0]}! You're in.`);
-      nav({ to: "/membership" });
+      nav("/membership");
     } else {
       if (!checks[0]) return toast.error("You must accept the risk acknowledgement.");
       registerOpenRunner({ name, email });
       toast.success(`Registered as Open Runner.`);
-      nav({ to: "/events" });
+      nav("/events");
     }
   }
 

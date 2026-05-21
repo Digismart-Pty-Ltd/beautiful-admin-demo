@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { pricing, WHATSAPP_NUMBER } from "@/lib/demo-data";
@@ -10,9 +10,7 @@ import {
   ArrowUpRight, Check, Dumbbell, Flame, MapPin, Sparkles, Trophy, Users, Clock, ChevronRight,
 } from "lucide-react";
 
-export const Route = createFileRoute("/")({ component: Home });
-
-function Home() {
+export default function Home() {
   const { state, currentMember, currentOpen } = useStore();
   const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Hi Waven — I'd like to sign up for personal training.")}`;
   const upcoming = state.events.slice(0, 4);
@@ -25,7 +23,6 @@ function Home() {
       <SiteHeader />
 
       <main className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-4 md:pt-10 pb-2">
-        {/* Greeting */}
         <div className="flex items-end justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Good run, runner</div>
@@ -38,7 +35,6 @@ function Home() {
           </div>
         </div>
 
-        {/* Hero card */}
         <section className="relative mt-5 overflow-hidden rounded-3xl border border-border shadow-glow">
           <img src={hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
           <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/40 to-primary/30" />
@@ -68,14 +64,12 @@ function Home() {
           </div>
         </section>
 
-        {/* Quick stats / tier strip */}
         <section className="mt-5 md:mt-8 grid grid-cols-3 gap-2.5 md:gap-5">
           <Stat icon={Trophy} label="Tier" value={tier} />
           <Stat icon={Sparkles} label="Rewards" value={String(state.rewards.length)} />
           <Stat icon={Users} label="Crew" value={String(state.members.length + state.openRunners.length)} />
         </section>
 
-        {/* Action chips */}
         <section className="mt-6">
           <SectionLabel>Quick actions</SectionLabel>
           <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
@@ -86,7 +80,6 @@ function Home() {
           </div>
         </section>
 
-        {/* Next runs (horizontal scroll) */}
         <section className="mt-7">
           <div className="flex items-end justify-between">
             <SectionLabel>Next on the road</SectionLabel>
@@ -124,7 +117,6 @@ function Home() {
           </div>
         </section>
 
-        {/* Pricing */}
         <section className="mt-8">
           <SectionLabel>Personal Training</SectionLabel>
           <h2 className="mt-1 display text-2xl">Pick your weight.</h2>
@@ -166,7 +158,6 @@ function Home() {
           </div>
         </section>
 
-        {/* Community */}
         <section className="mt-8 relative overflow-hidden rounded-3xl border border-border">
           <img src={community} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" loading="lazy" />
           <div className="absolute inset-0 bg-gradient-to-tr from-background via-background/70 to-primary/20" />

@@ -1,24 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { useStore } from "@/lib/store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Calendar, Clock, MapPin, Coffee, ChevronDown, Users, AlertTriangle, X, Check, MapPinned, Lock } from "lucide-react";
 import type { Event } from "@/lib/demo-data";
 
-export const Route = createFileRoute("/events")({
-  component: Events,
-  head: () => ({
-    meta: [
-      { title: "Events — Waven Harper Fitness" },
-      { name: "description", content: "Upcoming community runs with the Little Falls Runners. Book your spot." },
-    ],
-  }),
-});
-
-function Events() {
+export default function Events() {
   const { state } = useStore();
+  useEffect(() => { document.title = "Events — Waven Harper Fitness"; }, []);
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -51,7 +42,6 @@ function EventCard({ e }: { e: Event }) {
   const attendees = attendeesFor(e.id);
   const blocked = e.membersOnly && !currentMember;
 
-  // race day window: 30 min before -> 2h after start
   const start = new Date(`${e.date}T${e.time}`);
   const now = new Date();
   const windowOpen = now.getTime() >= start.getTime() - 30 * 60_000 && now.getTime() <= start.getTime() + 2 * 60 * 60_000;
@@ -78,7 +68,6 @@ function EventCard({ e }: { e: Event }) {
         else toast.error("Could not check in.");
       },
       () => {
-        // permissive demo fallback
         const r = checkIn(e.id);
         if (r?.checkedInAt) toast.success("Checked in (location skipped).");
       },

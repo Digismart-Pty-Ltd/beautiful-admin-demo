@@ -1,25 +1,21 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/login")({
-  component: Login,
-  head: () => ({ meta: [{ title: "Log in — Waven Harper Fitness" }] }),
-});
-
-function Login() {
+export default function Login() {
   const nav = useNavigate();
   const { loginByEmail, state } = useStore();
   const [email, setEmail] = useState("");
+  useEffect(() => { document.title = "Log in — Waven Harper Fitness"; }, []);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (loginByEmail(email)) {
       toast.success("Welcome back!");
-      nav({ to: "/membership" });
+      nav("/membership");
     } else {
       toast.error("No account with that email. Try joining instead.");
     }

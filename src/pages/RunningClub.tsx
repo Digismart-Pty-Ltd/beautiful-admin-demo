@@ -1,22 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import lfr from "@/assets/lfr-logo.jpeg";
 import community from "@/assets/community.jpg";
 import { events } from "@/lib/demo-data";
 import { Calendar, MapPin } from "lucide-react";
+import { useEffect } from "react";
 
-export const Route = createFileRoute("/running-club")({
-  component: RunningClub,
-  head: () => ({
-    meta: [
-      { title: "Little Falls Runners — Waven Harper Fitness" },
-      { name: "description", content: "Community running club based in Little Falls. No one is chasing us." },
-    ],
-  }),
-});
-
-function RunningClub() {
+export default function RunningClub() {
+  useEffect(() => { document.title = "Little Falls Runners — Waven Harper Fitness"; }, []);
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
