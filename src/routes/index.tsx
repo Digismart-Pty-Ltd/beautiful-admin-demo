@@ -24,7 +24,7 @@ function Home() {
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      <main className="mx-auto max-w-md px-5 pt-4 pb-2">
+      <main className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-4 md:pt-10 pb-2">
         {/* Greeting */}
         <div className="flex items-end justify-between">
           <div>
@@ -42,16 +42,16 @@ function Home() {
         <section className="relative mt-5 overflow-hidden rounded-3xl border border-border shadow-glow">
           <img src={hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
           <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/40 to-primary/30" />
-          <div className="relative p-6 pt-7 min-h-[260px] flex flex-col justify-between">
+          <div className="relative p-6 md:p-12 pt-7 min-h-[260px] md:min-h-[460px] flex flex-col justify-between">
             <div>
               <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/40 px-3 py-1 text-[9px] uppercase tracking-[0.3em] backdrop-blur">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                 Little Falls · Roodepoort
               </div>
-              <div className="mt-5 display text-[44px] leading-[0.9]">
+              <div className="mt-5 display text-[44px] md:text-[96px] leading-[0.9]">
                 Train.<br />Run.<br /><span className="text-gradient-brand">Rise.</span>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground max-w-[220px]">
+              <p className="mt-3 md:mt-6 text-xs md:text-base text-muted-foreground max-w-[220px] md:max-w-md">
                 Show up. Sign in. Earn it. The <span className="marker text-primary">no one is chasing us</span> crew is loading.
               </p>
             </div>
@@ -69,7 +69,7 @@ function Home() {
         </section>
 
         {/* Quick stats / tier strip */}
-        <section className="mt-5 grid grid-cols-3 gap-2.5">
+        <section className="mt-5 md:mt-8 grid grid-cols-3 gap-2.5 md:gap-5">
           <Stat icon={Trophy} label="Tier" value={tier} />
           <Stat icon={Sparkles} label="Rewards" value={String(state.rewards.length)} />
           <Stat icon={Users} label="Crew" value={String(state.members.length + state.openRunners.length)} />
@@ -78,7 +78,7 @@ function Home() {
         {/* Action chips */}
         <section className="mt-6">
           <SectionLabel>Quick actions</SectionLabel>
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
             <Action icon={Dumbbell} title="Personal Training" sub="1:1 with Waven" to="/" highlight />
             <Action icon={MapPin} title="Find a Run" sub="Open this week" to="/events" />
             <Action icon={Users} title="Little Falls" sub="The club" to="/running-club" />
@@ -128,7 +128,7 @@ function Home() {
         <section className="mt-8">
           <SectionLabel>Personal Training</SectionLabel>
           <h2 className="mt-1 display text-2xl">Pick your weight.</h2>
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-3 md:gap-5">
             {pricing.map((p) => (
               <div key={p.name}
                 className={`relative rounded-2xl border p-5 ${
