@@ -12,9 +12,9 @@ export function SiteFooter() {
   const { pathname } = useLocation();
   return (
     <>
-      {/* spacer so content isn't covered */}
-      <div aria-hidden className="h-28" />
-      <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
+      {/* spacer so content isn't covered (mobile only) */}
+      <div aria-hidden className="h-28 md:hidden" />
+      <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none md:hidden">
         <div className="mx-auto max-w-md px-4 pb-4 pointer-events-auto">
           <div className="rounded-2xl border border-border bg-card/90 backdrop-blur-xl shadow-glow px-2 py-2 grid grid-cols-4 gap-1">
             {tabs.map((t) => {
