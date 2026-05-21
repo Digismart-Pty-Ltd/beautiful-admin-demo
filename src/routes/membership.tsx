@@ -69,7 +69,7 @@ function Membership() {
         <p className="mt-3 text-muted-foreground">Here's where you stand.</p>
       </section>
 
-      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 grid gap-5 ">
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 grid gap-5 md:grid-cols-3">
         <div className="rounded-3xl border border-border bg-card p-7">
           <Trophy className="text-primary" />
           <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">Current tier</div>
@@ -112,7 +112,7 @@ function Membership() {
         {myRewards.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">Nothing in your tier yet. Keep stacking races.</p>
         ) : (
-          <div className="mt-6 grid gap-4 ">
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
             {myRewards.map((r) => {
               const isRedeemed = redeemed.has(r.id);
               return (
