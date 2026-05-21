@@ -40,7 +40,7 @@ export function SiteHeader() {
             return (
               <Link
                 key={l.to}
-                to={l.to}
+                to={l.to as any}
                 className={`px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.25em] transition ${
                   active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
