@@ -30,7 +30,7 @@ function Membership() {
     return (
       <div className="min-h-screen bg-background">
         <SiteHeader />
-        <section className="mx-auto max-w-md px-5 pt-24 text-center">
+        <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-24 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
             <Lock size={11} className="text-primary" /> Members only
           </div>
@@ -63,13 +63,13 @@ function Membership() {
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      <section className="mx-auto max-w-md px-5 pt-16 pb-8">
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-16 pb-8">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Member Dashboard</div>
         <h1 className="mt-3 display text-3xl ">Hey {me.name.split(" ")[0]}.</h1>
         <p className="mt-3 text-muted-foreground">Here's where you stand.</p>
       </section>
 
-      <section className="mx-auto max-w-md px-5 grid gap-5 ">
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 grid gap-5 md:grid-cols-3">
         <div className="rounded-3xl border border-border bg-card p-7">
           <Trophy className="text-primary" />
           <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">Current tier</div>
@@ -88,7 +88,7 @@ function Membership() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-md px-5 mt-16">
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-16">
         <h2 className="display text-3xl ">Tier progress</h2>
         <div className="mt-6 rounded-3xl border border-border bg-card p-8">
           <div className="relative h-2 w-full rounded-full bg-secondary overflow-hidden">
@@ -107,12 +107,12 @@ function Membership() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-md px-5 mt-16">
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-16">
         <h2 className="display text-3xl ">Your rewards</h2>
         {myRewards.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">Nothing in your tier yet. Keep stacking races.</p>
         ) : (
-          <div className="mt-6 grid gap-4 ">
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
             {myRewards.map((r) => {
               const isRedeemed = redeemed.has(r.id);
               return (
@@ -139,7 +139,7 @@ function Membership() {
         )}
       </section>
 
-      <section className="mx-auto max-w-md px-5 mt-16 pb-10">
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-16 pb-10">
         <h2 className="display text-3xl ">Your upcoming runs</h2>
         {myUpcoming.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">No bookings yet. <Link to="/events" className="text-primary underline">See events</Link>.</p>
