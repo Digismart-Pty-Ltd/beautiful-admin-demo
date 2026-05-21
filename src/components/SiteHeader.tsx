@@ -3,12 +3,12 @@ import { Bell, LogOut } from "lucide-react";
 import wh from "@/assets/wh-logo.jpeg";
 import { useStore } from "@/lib/store";
 
-const navLinks = [
+const navLinks: { to: string; label: string; exact?: boolean }[] = [
   { to: "/", label: "Home", exact: true },
   { to: "/events", label: "Runs" },
   { to: "/running-club", label: "Club" },
   { to: "/membership", label: "Rewards" },
-] as const;
+];
 
 export function SiteHeader() {
   const { currentMember, currentOpen, logout } = useStore();
