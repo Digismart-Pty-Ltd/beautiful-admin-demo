@@ -129,27 +129,34 @@ function EventCard({ e }: { e: Event }) {
             <Link to="/join" className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
               <Lock size={14} /> Members only — Join
             </Link>
-          ) : myReg ? (
-            <>
-              {myReg.checkedInAt ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 text-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em]">
-                  <Check size={14} /> Checked in
-                </span>
-              ) : windowOpen ? (
-                <button onClick={handleCheckIn}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
-                  <MapPinned size={14} /> Check in
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                  <Check size={14} /> Booked
-                </span>
-              )}
-              <button onClick={() => { cancelSignup(myReg.id); toast("Booking cancelled."); }}
-                className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-destructive hover:text-destructive">
-                Cancel
-              </button>
-            </>
+       ) : myReg ? (
+  <>
+    {myReg.checkedInAt ? (
+      <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 text-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em]">
+        <Check size={14} /> Checked in
+      </span>
+    ) : (
+      <>
+        <span className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+          <Check size={14} /> Booked
+        </span>
+        <button
+          onClick={handleCheckIn}
+          disabled={!windowOpen}
+          title={!windowOpen ? "Check-in opens 30 min before the run" : undefined}
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+        >
+          <MapPinned size={14} /> Check in
+        </button>
+      </>
+    )}
+    <button
+      onClick={() => { cancelSignup(myReg.id); toast("Booking cancelled."); }}
+      className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-destructive hover:text-destructive"
+    >
+      Cancel
+    </button>
+  </>
           ) : (
             <button disabled={!accepted} onClick={() => setSignupOpen(true)}
               className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed">

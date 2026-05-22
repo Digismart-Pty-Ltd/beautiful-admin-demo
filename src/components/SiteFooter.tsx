@@ -3,7 +3,7 @@ import { Home, CalendarDays, Trophy, User } from "lucide-react";
 
 const tabs = [
   { to: "/", label: "Home", icon: Home, exact: true },
-  { to: "/events", label: "Runs", icon: CalendarDays },
+  { to: "/events", label: "Events", icon: CalendarDays },
   { to: "/running-club", label: "Club", icon: User },
   { to: "/membership", label: "Rewards", icon: Trophy },
 ];
