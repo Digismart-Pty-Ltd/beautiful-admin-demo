@@ -3,7 +3,7 @@ import night from "@/assets/event-night.jpg";
 import park from "@/assets/event-park.jpg";
 import long from "@/assets/event-long.jpg";
 
-export type Tier = "Bronze" | "Silver" | "Gold" | "Platinum";
+export type Tier = "Pink" | "Silver" | "Gold" | "Platinum";
 
 export type Event = {
   id: string;
@@ -35,7 +35,7 @@ export const events: Event[] = [
       { name: "Thandi M.", tier: "Gold" },
       { name: "Sipho K.", tier: "Silver" },
       { name: "Ruan vd Berg", openRunner: true },
-      { name: "Lerato N.", tier: "Bronze" },
+      { name: "Lerato N.", tier: "Pink" },
     ],
   },
   {
@@ -68,7 +68,7 @@ export const events: Event[] = [
     distanceKm: 5,
     attendees: [
       { name: "Marco S.", openRunner: true },
-      { name: "Lerato N.", tier: "Bronze" },
+      { name: "Lerato N.", tier: "Pink" },
       { name: "Phumzile D.", tier: "Silver" },
       { name: "Anika P.", tier: "Silver" },
       { name: "Sipho K.", tier: "Silver" },
@@ -108,7 +108,7 @@ export const members: Member[] = [
   { id: "m2", name: "Thandi Mokoena", email: "thandi@lfr.run", joined: "2024-06-01", races: 27, tier: "Gold", rewardsPending: 0 },
   { id: "m3", name: "Sipho Khumalo", email: "sipho@lfr.run", joined: "2025-01-10", races: 14, tier: "Silver", rewardsPending: 1 },
   { id: "m4", name: "Anika Pretorius", email: "anika@lfr.run", joined: "2025-03-04", races: 12, tier: "Silver", rewardsPending: 0 },
-  { id: "m5", name: "Lerato Ndlovu", email: "lerato@lfr.run", joined: "2025-09-22", races: 6, tier: "Bronze", rewardsPending: 0 },
+  { id: "m5", name: "Lerato Ndlovu", email: "lerato@lfr.run", joined: "2025-09-22", races: 6, tier: "Pink", rewardsPending: 0 },
   { id: "m6", name: "Phumzile Dube", email: "phumzile@lfr.run", joined: "2024-11-15", races: 19, tier: "Silver", rewardsPending: 1 },
 ];
 
@@ -126,7 +126,7 @@ export type Reward = {
 };
 
 export const rewards: Reward[] = [
-  { id: "r1", tier: "Bronze", title: "Branded buff", description: "LFR pink buff. Collect at clubhouse.", expiresInDays: 30 },
+  { id: "r1", tier: "Pink", title: "Branded buff", description: "LFR pink buff. Collect at clubhouse.", expiresInDays: 30 },
   { id: "r2", tier: "Silver", title: "Tech tee voucher", description: "R250 off any club tee.", expiresInDays: 30 },
   { id: "r3", tier: "Gold", title: "Free race entry", description: "Any sponsored road race up to R350.", expiresInDays: 30 },
   { id: "r4", tier: "Platinum", title: "Coaching session", description: "1-on-1 hour with Waven.", expiresInDays: 30 },
@@ -139,4 +139,4 @@ export const pricing = [
   { name: "Elite", price: 2400, period: "/month", features: ["5x sessions / week", "Race-day prep", "Recovery & mobility plan", "24/7 WhatsApp access"], highlight: false },
 ];
 
-export const WHATSAPP_NUMBER = "27821234567"; // demo
+export const WHATSAPP_NUMBER = "27715643417";

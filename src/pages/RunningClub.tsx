@@ -1,25 +1,32 @@
 import { Link } from "react-router-dom";
-import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/SiteFooter";
-import lfr from "@/assets/lfr-logo.png";
-import hero from "@/assets/hero-runners.jpg";
+import lfr from "@/assets/lfr-logo-clean.png";
 import community from "@/assets/community.jpg";
-import wh from "@/assets/wh-logo.jpeg";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Instagram, ShoppingBag, X, Check, ChevronDown } from "lucide-react";
+import { ShoppingBag, X, Check, ChevronDown } from "lucide-react";
+import { toast } from "sonner";
 import tshirt1 from "@/assets/Tshirt-1.jpeg";
 import tshirt2 from "@/assets/Tshirt-2.jpeg";
 import socks from "@/assets/socks.jpeg";
+import vestBlack from "@/assets/vest-black.jpeg";
+import vestWhite from "@/assets/vest-white.jpeg";
+import emailjs from "@emailjs/browser";
 
-// ─── product catalogue ──────────────────────────────────────────────────────
+// ─── EmailJS config ───────────────────────────────────────────────────────────
+
+const EJS_SERVICE_ID  = "service_qwvwk9r";   // ← replace
+const EJS_TEMPLATE_ID = "template_nueotz9";  // ← replace
+const EJS_PUBLIC_KEY  = "Qmkoq-9evP8IE7AB_";   // ← replace
+const EJS_BATCH_TEMPLATE_ID = "template_syjb3dg"; // ← paste your new template ID here
+
+// ─── product catalogue ────────────────────────────────────────────────────────
 
 const TSHIRT_SIZES = ["S", "M", "L", "XL"] as const;
 const SOCK_SIZES = [
   { label: "Kids (5–8 yrs)", desc: "Crew only" },
-  { label: "Small", desc: "UK 12–3 / EU 32–38" },
-  { label: "Medium", desc: "UK 4–7 / EU 38–42" },
-  { label: "Large", desc: "UK 8–12 / EU 42–47" },
-  { label: "XL", desc: "UK 13+ / EU 47+" },
+  { label: "Small",          desc: "UK 12–3 / EU 32–38" },
+  { label: "Medium",         desc: "UK 4–7 / EU 38–42" },
+  { label: "Large",          desc: "UK 8–12 / EU 42–47" },
+  { label: "XL",             desc: "UK 13+ / EU 47+" },
 ] as const;
 
 type Product = {
@@ -35,18 +42,34 @@ const PRODUCTS: Product[] = [
   {
     id: "tshirt-mens",
     name: "Men's Tee",
-    price: 0,
+    price: 230,
     type: "tshirt",
     colours: ["White", "Black"],
-    description: "\"No One Is Chasing Us\" — LFR logo front, Little Falls Runners back. Sizes S–XL.",
+    description: '"No One Is Chasing Us" — LFR logo front, Little Falls Runners back. Sizes S–XL.',
   },
   {
     id: "tshirt-womens",
     name: "Women's Tee",
-    price: 0,
+    price: 230,
     type: "tshirt",
     colours: ["White", "Black"],
-    description: "\"No One Is Chasing Us\" — LFR logo front, Little Falls Runners back. Sizes S–XL.",
+    description: '"No One Is Chasing Us" — LFR logo front, Little Falls Runners back. Sizes S–XL.',
+  },
+  {
+    id: "vest-mens",
+    name: "Men's Vest",
+    price: 210,
+    type: "tshirt",
+    colours: ["White", "Black"],
+    description: '"No One Is Chasing Us" — LFR logo front, Little Falls Runners back. Sizes S–XL.',
+  },
+  {
+    id: "vest-womens",
+    name: "Women's Vest",
+    price: 210,
+    type: "tshirt",
+    colours: ["White", "Black"],
+    description: '"No One Is Chasing Us" — LFR logo front, Little Falls Runners back. Sizes S–XL.',
   },
   {
     id: "socks",
@@ -58,7 +81,7 @@ const PRODUCTS: Product[] = [
   },
 ];
 
-// ─── types ───────────────────────────────────────────────────────────────────
+// ─── types ────────────────────────────────────────────────────────────────────
 
 type OrderLine = {
   product: string;
@@ -75,14 +98,14 @@ type FormState = {
   notes: string;
 };
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function sizesFor(type: "tshirt" | "socks") {
   if (type === "tshirt") return TSHIRT_SIZES as unknown as string[];
   return SOCK_SIZES.map((s) => s.label);
 }
 
-// ─── page ────────────────────────────────────────────────────────────────────
+// ─── page ─────────────────────────────────────────────────────────────────────
 
 export default function RunningClub() {
   useEffect(() => { document.title = "Little Falls Runners — Waven Harper Fitness"; }, []);
@@ -90,7 +113,6 @@ export default function RunningClub() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden">
@@ -99,13 +121,10 @@ export default function RunningClub() {
           <div className="absolute inset-0 bg-gradient-to-b from-background/60 to-background" />
         </div>
         <div className="relative mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-20 pb-20 grid md:grid-cols-[auto,1fr] gap-10 items-center">
-<div className="mb-4 h-28 w-28 md:h-36 md:w-36 overflow-hidden rounded-full ring-2 ring-primary shadow-glow bg-transparent">
-  <img
-    src={lfr}
-    alt="LFR"
-    className="h-full w-full object-cover scale-110"
-  />
-</div>          <div>
+          <div className="mb-4 h-28 w-28 md:h-36 md:w-36 overflow-hidden rounded-full ring-2 ring-primary shadow-glow bg-transparent">
+            <img src={lfr} alt="LFR" className="h-full w-full object-cover scale-110" />
+          </div>
+          <div>
             <div className="text-xs uppercase tracking-[0.3em] text-primary">Community Club</div>
             <h1 className="mt-3 display text-4xl md:text-8xl leading-[0.9]">Little Falls<br />Runners.</h1>
             <p className="marker mt-4 text-primary text-3xl md:text-5xl">No one is chasing us.</p>
@@ -125,9 +144,9 @@ export default function RunningClub() {
       {/* ── Stats ── */}
       <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-16 grid gap-4 md:grid-cols-3">
         {[
-          { k: "120+", v: "Active members" },
-          { k: "4×", v: "Group runs / week" },
-          { k: "0", v: "People chasing us" },
+          { k: "150+", v: "Active members" },
+          { k: "4×",   v: "Group runs / week" },
+          { k: "0",    v: "People chasing us" },
         ].map((s) => (
           <div key={s.v} className="rounded-2xl border border-border bg-card p-8 text-center">
             <div className="display text-4xl md:text-6xl text-primary">{s.k}</div>
@@ -152,145 +171,17 @@ export default function RunningClub() {
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
-  {/* White tee card */}
-  <MerchCard
-    label="White / Pink"
-    tag="Tee — Unisex cut"
-    price="POA"
-    sizes="S · M · L · XL"
-    imgSrc={tshirt1}
-    imgAlt="White LFR tee"
-  />
+          <MerchCard label="White / Pink" tag="Tee — Unisex cut" price="R230" sizes="S · M · L · XL" imgSrc={tshirt1} imgAlt="White LFR tee" />
+          <MerchCard label="Black / White" tag="Tee — Unisex cut" price="R230" sizes="S · M · L · XL" imgSrc={tshirt2} imgAlt="Black LFR tee" />
+          <MerchCard label="Black Vest" tag="Vest — Unisex cut" price="R210" sizes="S · M · L · XL" imgSrc={vestBlack} imgAlt="Black LFR vest" />
+          <MerchCard label="White Vest" tag="Vest — Unisex cut" price="R210" sizes="S · M · L · XL" imgSrc={vestWhite} imgAlt="White LFR vest" />
+          <MerchCard label="Pink & White" tag="LFR Socks" price="R150" sizes="Kids · S · M · L · XL" imgSrc={socks} imgAlt="LFR socks" />
+        </div>
 
-  {/* Black tee card */}
-  <MerchCard
-    label="Black / White"
-    tag="Tee — Unisex cut"
-    price="POA"
-    sizes="S · M · L · XL"
-    imgSrc={tshirt2}
-    imgAlt="Black LFR tee"
-  />
-
-  {/* Socks card */}
-  <MerchCard
-    label="Pink & White"
-    tag="LFR Socks"
-    price="R150"
-    sizes="Kids · S · M · L · XL"
-    imgSrc={socks}
-    imgAlt="LFR socks"
-  />
-</div>
         <p className="mt-5 text-xs text-muted-foreground">
-          * T-shirt pricing confirmed on order. All orders processed manually — we'll confirm stock and cost via WhatsApp or email.
+          * All orders processed manually — we'll confirm stock and payment details via WhatsApp or email.
         </p>
       </section>
-
-  {/* ── INSTAGRAM ── */}
-<section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-24">{/* Heading */}
-<div className="flex items-end justify-between gap-4 mb-6">
-  <div>
-    <div className="text-[10px] uppercase tracking-[0.3em] text-primary font-semibold">
-      Follow Along
-    </div>
-
-    <h2 className="mt-2 display text-3xl md:text-6xl leading-[0.95]">
-      On Instagram.
-    </h2>
-  </div>
-</div>
-
-  {/* Instagram Card */}
-  <div className="rounded-3xl border border-border bg-card overflow-hidden">
-
-    {/* Top Bar */}
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-        <Instagram size={12} /> Latest posts from Instagram
-      </div>
-
-      <a
-        href="https://instagram.com/wavenharper"
-        target="_blank"
-        rel="noreferrer"
-        className="text-[10px] uppercase tracking-[0.2em] text-primary flex items-center gap-0.5"
-      >
-        Open Instagram <ArrowUpRight size={11} />
-      </a>
-    </div>
-
-    {/* Profile Row */}
-    <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-
-      <div className="flex items-center gap-3">
-
-        {/* Circular Profile */}
-        <div className="h-12 w-12 overflow-hidden rounded-full ring-2 ring-primary">
-          <img
-            src={wh}
-            alt="Waven Harper"
-            className="h-full w-full object-cover"
-          />
-        </div>
-
-        <div>
-          <div className="display text-lg leading-none">
-            Waven Harper
-          </div>
-
-          <div className="text-[11px] text-muted-foreground mt-1">
-            @wavenharper
-          </div>
-        </div>
-      </div>
-
-      <button className="rounded-full border border-border px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] hover:border-primary transition">
-        Follow
-      </button>
-    </div>
-
-    {/* Stats */}
-    <div className="grid grid-cols-3 divide-x divide-border border-b border-border">
-      {[
-        ["48", "Posts"],
-        ["1.2K", "Followers"],
-        ["312", "Following"],
-      ].map(([val, lbl]) => (
-        <div
-          key={lbl}
-          className="flex flex-col items-center py-4"
-        >
-          <span className="display text-2xl leading-none">
-            {val}
-          </span>
-
-          <span className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">
-            {lbl}
-          </span>
-        </div>
-      ))}
-    </div>
-
-    {/* Photo Grid */}
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-0.5">
-
-      {[hero, community, hero, community].map((img, i) => (
-        <div
-          key={i}
-          className="aspect-square overflow-hidden bg-muted"
-        >
-          <img
-            src={img}
-            alt=""
-            className="h-full w-full object-cover transition duration-700 hover:scale-105"
-          />
-        </div>
-      ))}
-
-    </div>
-  </div>
-</section>
 
       {/* ── Join CTA ── */}
       <section className="mx-auto max-w-4xl px-5 mt-24 pb-16 text-center">
@@ -306,7 +197,6 @@ export default function RunningClub() {
         </div>
       </section>
 
-      <SiteFooter />
 
       {/* ── Order Modal ── */}
       {orderOpen && <OrderModal onClose={() => setOrderOpen(false)} />}
@@ -314,7 +204,7 @@ export default function RunningClub() {
   );
 }
 
-// ─── merch card ──────────────────────────────────────────────────────────────
+// ─── merch card ───────────────────────────────────────────────────────────────
 
 function MerchCard({
   label, tag, price, sizes, imgSrc, imgAlt,
@@ -327,8 +217,8 @@ function MerchCard({
   return (
     <div className="group rounded-3xl border border-border bg-card overflow-hidden">
       <div
-className="aspect-[3/4] overflow-hidden bg-secondary/20 flex items-center justify-center"
-        style={isPlaceholder ? { backgroundColor: placeholderColour } : undefined}
+        className="aspect-[3/4] overflow-hidden flex items-center justify-center"
+        style={isPlaceholder ? { backgroundColor: placeholderColour } : { backgroundColor: "#ffffff" }}
       >
         {isPlaceholder ? (
           <span
@@ -338,7 +228,7 @@ className="aspect-[3/4] overflow-hidden bg-secondary/20 flex items-center justif
             {placeholderText}
           </span>
         ) : (
-          <img src={imgSrc} alt={imgAlt} className="h-full w-full object-contain transition duration-700 group-hover:scale-105"/>
+          <img src={imgSrc} alt={imgAlt} className="h-full w-full object-contain transition duration-700 group-hover:scale-105" />
         )}
       </div>
       <div className="p-5">
@@ -353,50 +243,121 @@ className="aspect-[3/4] overflow-hidden bg-secondary/20 flex items-center justif
   );
 }
 
-// ─── order modal ─────────────────────────────────────────────────────────────
+// ─── order modal ──────────────────────────────────────────────────────────────
 
 function OrderModal({ onClose }: { onClose: () => void }) {
-  const blank = (): OrderLine => ({ product: PRODUCTS[0].id, colour: PRODUCTS[0].colours[0], size: sizesFor(PRODUCTS[0].type)[0], qty: 1 });
+  const blank = (): OrderLine => ({
+    product: PRODUCTS[0].id,
+    colour: PRODUCTS[0].colours[0],
+    size: sizesFor(PRODUCTS[0].type)[0],
+    qty: 1,
+  });
 
   const [form, setForm] = useState<FormState>({
     name: "", email: "", phone: "", notes: "",
     lines: [blank()],
   });
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted]   = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [sockGuideOpen, setSockGuideOpen] = useState(false);
 
   function updateLine(i: number, patch: Partial<OrderLine>) {
     const lines = form.lines.map((l, idx) => {
       if (idx !== i) return l;
       const updated = { ...l, ...patch };
-      // reset size when product changes
       if (patch.product) {
         const prod = PRODUCTS.find((p) => p.id === patch.product)!;
         updated.colour = prod.colours[0];
-        updated.size = sizesFor(prod.type)[0];
+        updated.size   = sizesFor(prod.type)[0];
       }
       return updated;
     });
     setForm({ ...form, lines });
   }
 
-  function addLine() { setForm({ ...form, lines: [...form.lines, blank()] }); }
+  function addLine()        { setForm({ ...form, lines: [...form.lines, blank()] }); }
   function removeLine(i: number) { setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) }); }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    // In production: POST to your backend / email / WhatsApp API here
-    console.log("ORDER", form);
+async function handleSubmit(e: React.FormEvent) {
+  e.preventDefault();
+  setSubmitting(true);
+
+  const orderItems = form.lines
+    .map((l) => `${l.qty}x ${l.product} — ${l.colour}, ${l.size}`)
+    .join("\n");
+
+  try {
+    // 1. Send individual order email (existing behaviour)
+    await emailjs.send(
+      EJS_SERVICE_ID,
+      EJS_TEMPLATE_ID,
+      {
+        customer_name:  form.name,
+        customer_email: form.email,
+        customer_phone: form.phone,
+        order_items:    orderItems,
+        notes:          form.notes || "—",
+      },
+      EJS_PUBLIC_KEY,
+    );
+
+    // 2. Save order to localStorage and check batch threshold
+    const { loadOrders, saveOrders, markBatched, BATCH_SIZE } = await import("@/lib/orders");
+    const newOrder = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      lines: form.lines,
+      notes: form.notes,
+      batched: false,
+    };
+    const updated = [...loadOrders(), newOrder];
+    saveOrders(updated);
+
+    const unbatched = updated.filter((o) => !o.batched);
+    if (unbatched.length >= BATCH_SIZE) {
+      const orderDetails = unbatched.map((o, i) =>
+        `ORDER ${i + 1} — ${o.createdAt.slice(0, 10)}\nName: ${o.name}\nEmail: ${o.email}\nPhone: ${o.phone}\nItems: ${o.lines.map((l) => `${l.qty}x ${l.product} (${l.colour}, ${l.size})`).join(", ")}\nNotes: ${o.notes || "—"}`
+      ).join("\n\n---\n\n");
+
+      // 3. Auto-send batch summary email via EmailJS
+      await emailjs.send(
+        EJS_SERVICE_ID,
+        EJS_BATCH_TEMPLATE_ID,
+        {
+          batch_count:   unbatched.length,
+          order_details: orderDetails,
+        },
+        EJS_PUBLIC_KEY,
+      );
+
+      markBatched(unbatched.map((o) => o.id));
+      toast.info("Batch of 10 orders sent to admin automatically.");
+    }
+
     setSubmitted(true);
+  } catch (err) {
+    toast.error("Something went wrong — please try WhatsApp instead.");
+    console.error(err);
+  } finally {
+    setSubmitting(false);
   }
+}
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 backdrop-blur p-4 overflow-y-auto" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 backdrop-blur p-4 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
         className="relative w-full max-w-xl rounded-3xl border border-border bg-card p-6 md:p-8 my-8"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X size={18} /></button>
+        <button onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground">
+          <X size={18} />
+        </button>
 
         {submitted ? (
           <div className="py-12 text-center">
@@ -407,7 +368,10 @@ function OrderModal({ onClose }: { onClose: () => void }) {
             <p className="mt-3 text-sm text-muted-foreground max-w-xs mx-auto">
               We'll confirm your order, stock, and payment details via WhatsApp or email within 24 hours.
             </p>
-            <button onClick={onClose} className="mt-8 inline-flex rounded-full border border-border px-7 py-3 text-xs uppercase tracking-[0.2em] hover:border-primary">
+            <button
+              onClick={onClose}
+              className="mt-8 inline-flex rounded-full border border-border px-7 py-3 text-xs uppercase tracking-[0.2em] hover:border-primary"
+            >
               Close
             </button>
           </div>
@@ -419,7 +383,7 @@ function OrderModal({ onClose }: { onClose: () => void }) {
             <form onSubmit={handleSubmit} className="mt-6 space-y-5">
               {/* contact */}
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+                <Field label="Full name"        value={form.name}  onChange={(v) => setForm({ ...form, name: v })}  required />
                 <Field label="Phone / WhatsApp" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} required />
               </div>
               <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" required />
@@ -441,7 +405,6 @@ function OrderModal({ onClose }: { onClose: () => void }) {
                           )}
                         </div>
 
-                        {/* product */}
                         <SelectField
                           label="Product"
                           value={line.product}
@@ -450,21 +413,18 @@ function OrderModal({ onClose }: { onClose: () => void }) {
                         />
 
                         <div className="grid gap-3 grid-cols-3">
-                          {/* colour */}
                           <SelectField
                             label="Colour"
                             value={line.colour}
                             onChange={(v) => updateLine(i, { colour: v })}
                             options={prod.colours.map((c) => ({ value: c, label: c }))}
                           />
-                          {/* size */}
                           <SelectField
                             label="Size"
                             value={line.size}
                             onChange={(v) => updateLine(i, { size: v })}
                             options={sizesFor(prod.type).map((s) => ({ value: s, label: s }))}
                           />
-                          {/* qty */}
                           <label className="block">
                             <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Qty</span>
                             <input
@@ -480,11 +440,7 @@ function OrderModal({ onClose }: { onClose: () => void }) {
                   })}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={addLine}
-                  className="mt-3 text-xs text-primary underline underline-offset-2"
-                >
+                <button type="button" onClick={addLine} className="mt-3 text-xs text-primary underline underline-offset-2">
                   + Add another item
                 </button>
               </div>
@@ -535,9 +491,10 @@ function OrderModal({ onClose }: { onClose: () => void }) {
 
               <button
                 type="submit"
-                className="w-full rounded-full bg-primary px-5 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow"
+                disabled={submitting}
+                className="w-full rounded-full bg-primary px-5 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Submit order
+                {submitting ? "Sending…" : "Submit order"}
               </button>
 
               <p className="text-[11px] text-muted-foreground text-center">

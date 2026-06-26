@@ -1,96 +1,381 @@
-import { Link } from "react-router-dom";
-import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/SiteFooter";
+import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "@/lib/store";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
-import { Calendar, Clock, MapPin, Coffee, ChevronDown, Users, AlertTriangle, X, Check, MapPinned, Lock } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  MapPin,
+  Coffee,
+  ChevronDown,
+  Users,
+  AlertTriangle,
+  X,
+  Check,
+  MapPinned,
+  Lock,
+  Loader2,
+  ShieldCheck,
+  LogIn,
+} from "lucide-react";
 import type { Event } from "@/lib/demo-data";
+import { subscribeToEvents } from "@/lib/eventService";
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  getDoc,
+  updateDoc,
+  query,
+  where,
+  getDocs,
+  serverTimestamp,
+  onSnapshot,
+} from "firebase/firestore";
+import { Html5QrcodeScanner } from "html5-qrcode";
+import { db } from "@/lib/firebase";
 
 export default function Events() {
-  const { state } = useStore();
-  useEffect(() => { document.title = "Events — Waven Harper Fitness"; }, []);
+  const { state, setEvents } = useStore();
+  const [searchParams] = useSearchParams();
+  const checkinEventId = searchParams.get("checkin");
+  const scrollRef = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    document.title = "Events — Waven Harper Fitness";
+  }, []);
+
+  // Auto-scroll to the event that needs check-in
+  useEffect(() => {
+    if (!checkinEventId) return;
+    const el = scrollRef.current[checkinEventId];
+    if (el) {
+      setTimeout(() => el.scrollIntoView({ behavior: "smooth", inline: "center" }), 300);
+    }
+  }, [checkinEventId, state.events]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToEvents((events) => {
+      setEvents(events);
+    });
+    return () => unsubscribe();
+  }, [setEvents]);
+
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const upcomingEvents = state.events.filter((e) => e.date >= todayStr);
+
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
       <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-16 pb-10">
-        <div className="text-xs uppercase tracking-[0.3em] text-primary">What's next</div>
+        <div className="text-xs uppercase tracking-[0.3em] text-primary">
+          What's next
+        </div>
         <h1 className="mt-3 display text-4xl md:text-7xl">Events.</h1>
-        <p className="mt-4 max-w-xl text-muted-foreground md:text-lg">The next runs on the calendar. Book your spot, lace up, see you there.</p>
+        <p className="mt-4 max-w-xl text-muted-foreground md:text-lg">
+          The next events on the calendar. Book your spot, lace up, see you
+          there.
+        </p>
       </section>
 
-      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-10">
-        {state.events.map((e) => <EventCard key={e.id} e={e} />)}
+      <section className="relative pb-10">
+        {upcomingEvents.length === 0 ? (
+          <div className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 py-20 text-center text-muted-foreground text-sm">
+            No upcoming events scheduled. Check back soon.
+          </div>
+        ) : (
+          <div
+            className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+            style={{ scrollbarWidth: "none" }}
+          >
+            {upcomingEvents.map((e, i) => (
+              <div
+                key={e.id}
+                ref={(el) => { scrollRef.current[e.id] = el; }}
+                className={`snap-center shrink-0 w-screen min-h-[calc(100vh-140px)] px-4 md:px-12 flex flex-col justify-start pt-2 pb-10 ${
+                  checkinEventId === e.id ? "ring-2 ring-primary/40 rounded-3xl" : ""
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5 mb-4">
+                  {upcomingEvents.map((_, j) => (
+                    <span
+                      key={j}
+                      className={`block rounded-full transition-all ${
+                        j === i
+                          ? "w-5 h-1.5 bg-primary"
+                          : "w-1.5 h-1.5 bg-border"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="mx-auto w-full max-w-xl">
+                  <EventCard e={e} />
+                </div>
+                {upcomingEvents.length > 1 && (
+                  <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground mt-5">
+                    {i + 1} / {upcomingEvents.length} — swipe for more
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
-
-      <SiteFooter />
     </div>
   );
 }
 
+function isValidPhone(value: string) {
+  return /^[+]?[\d\s\-().]{7,15}$/.test(value.trim());
+}
+
 function EventCard({ e }: { e: Event }) {
-  const { currentMember, currentOpen, signUpForEvent, myRegistrationFor, attendeesFor, cancelSignup, checkIn } = useStore();
+  const { currentMember, currentOpen, state } = useStore();
   const [open, setOpen] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
   const [attendOpen, setAttendOpen] = useState(false);
-  const [name, setName] = useState(currentMember?.name ?? currentOpen?.name ?? "");
-  const [contact, setContact] = useState("");
-  const [emergency, setEmergency] = useState("");
 
-  const myReg = myRegistrationFor(e.id);
-  const attendees = attendeesFor(e.id);
-  const blocked = e.membersOnly && !currentMember;
+  const [attendees, setAttendees] = useState<
+    { id: string; name: string; checkedInAt?: string; openRunner?: boolean; tier?: string }[]
+  >([]);
+  const [myReg, setMyReg] = useState<{ id: string; checkedInAt?: string } | null>(null);
+
+  const currentUser = currentMember ?? currentOpen;
+  const isLoggedIn = Boolean(currentUser);
+
+  useEffect(() => {
+    if (!e.id) return;
+    const q = query(
+      collection(db, "eventRegistrations"),
+      where("eventId", "==", e.id)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setAttendees(regs);
+      if (currentUser?.id) {
+        const mine = regs.find((r: any) => r.userId === currentUser.id) ?? null;
+        setMyReg(mine);
+      }
+    });
+    return () => unsub();
+  }, [e.id, currentUser?.id]);
+
+// ── Check-in reminder notification ──
+useEffect(() => {
+  if (!myReg || myReg.checkedInAt || !currentUser) return;
+
+  const start = new Date(`${e.date}T${e.time}`);
+  const reminderTime = start.getTime() - 30 * 60_000; // 30 min before
+  const now = Date.now();
+  const delay = reminderTime - now;
+
+  // Only schedule if reminder is in the future and within 24 hours
+  if (delay <= 0 || delay > 24 * 60 * 60_000) return;
+
+  const timer = setTimeout(async () => {
+    // Browser notification
+    if ("Notification" in window && Notification.permission === "granted") {
+      const notif = new Notification("Time to check in! 🏃", {
+        body: `${e.title} starts in 30 minutes. Tap to check in.`,
+        icon: "/wh-logo.jpeg",
+        tag: `checkin-${e.id}`,
+      });
+      notif.onclick = () => {
+        window.focus();
+        window.location.href = `/events?checkin=${e.id}`;
+      };
+    }
+
+    // In-app notification (shows in bell + notifications page)
+    try {
+      const { createNotification } = await import("@/lib/notificationService");
+      await createNotification({
+        title: `Check in: ${e.title}`,
+        body: "Your event starts in 30 minutes. Tap to check in now.",
+        audience: "members",
+        link: `/events?checkin=${e.id}`,
+      });
+    } catch {
+      // non-blocking
+    }
+  }, delay);
+
+  // Request permission if not granted
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+
+  return () => clearTimeout(timer);
+}, [myReg, e.id, e.date, e.time, currentUser]);
+
+  const [name, setName] = useState(currentUser?.name ?? "");
+  const [contact, setContact] = useState("");
+  const [emergencyName, setEmergencyName] = useState("");
+  const [emergencyNumber, setEmergencyNumber] = useState("");
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [contactError, setContactError] = useState("");
+  const [emergencyNumberError, setEmergencyNumberError] = useState("");
+
+  useEffect(() => {
+    if (!currentMember?.id) return;
+    getDoc(doc(db, "users", currentMember.id)).then((snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data() as any;
+      if (data.contact) setContact(data.contact);
+      if (data.emergency) {
+        const parts = data.emergency.split(" — ");
+        setEmergencyName(parts[0]?.trim() ?? "");
+        setEmergencyNumber(parts[1]?.trim() ?? "");
+      }
+      setProfileLoaded(true);
+    });
+  }, [currentMember?.id]);
+
+  const [signingUp, setSigningUp] = useState(false);
+const [checkingIn, setCheckingIn] = useState(false);
+const [scannerOpen, setScannerOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+const blocked = e.membersOnly && !currentMember;
 
   const start = new Date(`${e.date}T${e.time}`);
   const now = new Date();
-  const windowOpen = now.getTime() >= start.getTime() - 30 * 60_000 && now.getTime() <= start.getTime() + 2 * 60 * 60_000;
+  const windowOpen =
+    now.getTime() >= start.getTime() - 30 * 60_000 &&
+    now.getTime() <= start.getTime() + 2 * 60 * 60_000;
+  const checkInClosed = now.getTime() > start.getTime() + 2 * 60 * 60_000;
+  const registrationClosed = now.getTime() >= start.getTime();
 
-  function handleSignup(ev: React.FormEvent) {
-    ev.preventDefault();
-    const reg = signUpForEvent(e.id, { name, contact, emergency });
-    if (!reg) return toast.error(blocked ? "Members only event." : "Already signed up.");
-    toast.success(`You're in — ${e.title}`);
-    setSignupOpen(false);
+  function validateContact(value: string) {
+    if (value && !isValidPhone(value)) {
+      setContactError("Please enter a valid phone number.");
+      return false;
+    }
+    setContactError("");
+    return true;
   }
 
-  function handleCheckIn() {
-    if (!("geolocation" in navigator)) {
-      const r = checkIn(e.id);
-      if (r?.checkedInAt) toast.success("Checked in!");
-      return;
+  function validateEmergencyNumber(value: string) {
+    if (value && !isValidPhone(value)) {
+      setEmergencyNumberError("Please enter a valid phone number.");
+      return false;
     }
-    toast.info("Verifying location…");
-    navigator.geolocation.getCurrentPosition(
-      () => {
-        const r = checkIn(e.id);
-        if (r?.checkedInAt) toast.success("Checked in! Race counted.");
-        else toast.error("Could not check in.");
-      },
-      () => {
-        const r = checkIn(e.id);
-        if (r?.checkedInAt) toast.success("Checked in (location skipped).");
-      },
-      { timeout: 5000 }
-    );
+    setEmergencyNumberError("");
+    return true;
+  }
+
+  async function handleSignup(ev: React.FormEvent) {
+    ev.preventDefault();
+
+    const contactOk = validateContact(contact);
+    const emergencyOk = validateEmergencyNumber(emergencyNumber);
+    if (!contactOk || !emergencyOk) return;
+
+    if (!name.trim()) return toast.error("Please enter your full name.");
+    if (!contact.trim()) return toast.error("Please enter your contact number.");
+    if (!emergencyName.trim()) return toast.error("Please enter your emergency contact's name.");
+    if (!emergencyNumber.trim()) return toast.error("Please enter your emergency contact's number.");
+
+    setSigningUp(true);
+    try {
+      if (myReg) {
+        toast.error("You're already signed up for this event.");
+        return;
+      }
+
+      await addDoc(collection(db, "eventRegistrations"), {
+        eventId: e.id,
+        userId: currentUser?.id ?? null,
+        name,
+        contact,
+        emergency: `${emergencyName} — ${emergencyNumber}`,
+        openRunner: !currentMember,
+        tier: (currentMember as any)?.tier ?? null,
+        checkedInAt: null,
+        createdAt: serverTimestamp(),
+      });
+
+      toast.success(`You're in — ${e.title}`);
+      setSignupOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Sign-up failed. Please try again.");
+    } finally {
+      setSigningUp(false);
+    }
+  }
+
+ async function doCheckIn() {
+  if (!myReg) {
+    toast.error("You're not signed up for this event.");
+    return;
+  }
+  setCheckingIn(true);
+  try {
+    await updateDoc(doc(db, "eventRegistrations", myReg.id), {
+      checkedInAt: new Date().toISOString(),
+    });
+    toast.success("Checked in! Event counted.");
+  } catch (err) {
+    console.error(err);
+    toast.error("Check-in failed. Please try again.");
+  } finally {
+    setCheckingIn(false);
+  }
+}
+
+function handleCheckIn() {
+  setScannerOpen(true);
+}
+
+  async function handleCancel() {
+    if (!myReg) return;
+    if (!window.confirm("Cancel this booking? You can rebook later if needed.")) return;
+
+    setCancelling(true);
+    try {
+      await deleteDoc(doc(db, "eventRegistrations", myReg.id));
+      toast("Booking cancelled.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not cancel. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
   }
 
   return (
     <article className="group relative overflow-hidden rounded-3xl border border-border bg-card">
-      <div className="relative aspect-[16/9] overflow-hidden">
-        <img src={e.image} alt={e.title} loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+      <div className={`relative overflow-hidden ${(e as any).imageOrientation === "portrait" ? "aspect-[3/4]" : "aspect-[16/9]"}`}>
+        {e.image ? (
+          <img
+            src={e.image}
+            alt={e.title}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+          />
+        ) : (
+          <div className="h-full w-full bg-secondary flex items-center justify-center">
+            <Calendar className="text-muted-foreground" size={32} />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent" />
         {e.membersOnly && (
-          <span className="absolute top-4 left-4 rounded-full bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground">Members Only</span>
+          <span className="absolute top-4 left-4 rounded-full bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground">
+            Members Only
+          </span>
         )}
         <span className="absolute top-4 right-4 inline-flex items-center gap-1 rounded-full bg-background/70 backdrop-blur px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-foreground border border-border">
-          <AlertTriangle size={11} className="text-primary" /> Run at your own risk
+          <AlertTriangle size={11} className="text-primary" /> Participate at your own risk
         </span>
       </div>
 
       <div className="p-6">
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-primary">
-          <span>{e.distanceKm}K</span><span>·</span><span>{new Date(e.date).toDateString()}</span>
+          <span>{e.distanceKm}K</span>
+          <span>·</span>
+          <span>{new Date(e.date).toDateString()}</span>
         </div>
         <h3 className="mt-2 display text-2xl">{e.title}</h3>
         <p className="mt-2 text-sm text-muted-foreground">{e.description}</p>
@@ -99,99 +384,218 @@ function EventCard({ e }: { e: Event }) {
           <Info icon={Clock} label="Start" value={e.time} />
           <Info icon={Calendar} label="Date" value={new Date(e.date).toDateString().slice(4)} />
           <Info icon={MapPin} label="Meet at" value={e.meetingPlace} />
-          <Info icon={Coffee} label="After-run" value={e.afterRunPlace} />
+          <Info icon={Coffee} label="After event" value={e.afterRunPlace} />
         </div>
 
-        {!myReg && (
+        {/* Waiver — only shown if logged in and not yet registered */}
+        {isLoggedIn && !myReg && (
           <div className="mt-5 rounded-xl border border-border">
-            <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            <button
+              onClick={() => setOpen(!open)}
+              className="flex w-full items-center justify-between px-4 py-3 text-xs uppercase tracking-[0.2em] text-muted-foreground active:bg-secondary/40 transition-colors"
+            >
               Indemnity & waiver
               <ChevronDown size={14} className={`transition ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
-              <div className="px-4 pb-4 text-xs text-muted-foreground space-y-2 max-h-56 overflow-y-auto">
-                <p><strong className="text-foreground">Risk.</strong> Running involves inherent risks including injury, illness or death.</p>
-                <p><strong className="text-foreground">Medical Fitness.</strong> I confirm I am medically fit to participate.</p>
-                <p><strong className="text-foreground">Indemnity.</strong> I indemnify Little Falls Runners NPC, its directors, organisers and volunteers from any and all claims.</p>
-                <p><strong className="text-foreground">Media consent.</strong> Photos and video may be used for community communication.</p>
-                <p>Governed by the laws of the Republic of South Africa.</p>
+              <div className="px-4 pb-4 text-xs text-muted-foreground space-y-2 max-h-72 overflow-y-auto">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+                  "No one is chasing us." — Little Falls Runners NPC
+                </p>
+                <p><strong className="text-foreground">Acknowledgement of Risk.</strong> I acknowledge that participation in running and fitness events involves inherent risks including but not limited to physical injury, illness or death. I voluntarily assume all such risks.</p>
+                <p><strong className="text-foreground">Medical Fitness.</strong> I confirm that I am physically and medically fit to participate in this event. I have consulted a medical professional where necessary and take full responsibility for my health and wellbeing during participation.</p>
+                <p><strong className="text-foreground">Indemnity & Release.</strong> I hereby indemnify and hold harmless Little Falls Runners NPC, Waven Harper Fitness, its directors, organisers, volunteers, sponsors and representatives from any and all claims, damages, losses, costs or expenses arising from my participation, including claims arising from negligence.</p>
+                <p><strong className="text-foreground">Personal Responsibility.</strong> I agree to follow all safety guidance, obey applicable road rules, act responsibly during the event and run or walk within my personal limits at all times.</p>
+                <p><strong className="text-foreground">Voluntary Participation.</strong> I understand that my participation is entirely voluntary. I may withdraw at any time, and accept that I do so at my own risk without claim against the organisers.</p>
+                <p><strong className="text-foreground">Emergency Contact.</strong> I authorise event organisers to obtain emergency medical treatment on my behalf if I am unable to communicate and I acknowledge that associated costs are my own responsibility.</p>
+                <p><strong className="text-foreground">Media Consent.</strong> I consent to photographs and video footage taken at events being used for community communication, social media, and promotional purposes by Little Falls Runners NPC and Waven Harper Fitness.</p>
+                <p><strong className="text-foreground">Governing Law.</strong> This agreement is governed by and construed in accordance with the laws of the Republic of South Africa. Any disputes shall be subject to the jurisdiction of South African courts.</p>
               </div>
             )}
             <label className="flex items-center gap-2 px-4 pb-3 text-xs cursor-pointer">
-              <input type="checkbox" checked={accepted} onChange={(ev) => setAccepted(ev.target.checked)} className="accent-primary" />
-              <span>Accept all — I have read and agree to the waiver.</span>
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(ev) => setAccepted(ev.target.checked)}
+                className="accent-primary"
+              />
+              <span>Accept all — I have read and agree to the full waiver.</span>
             </label>
           </div>
         )}
 
         <div className="mt-5 flex flex-wrap gap-2">
+          {/* Members-only gate */}
           {blocked ? (
-            <Link to="/join" className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            <Link
+              to="/join"
+              className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary active:scale-95 transition-transform"
+            >
               <Lock size={14} /> Members only — Join
             </Link>
-       ) : myReg ? (
-  <>
-    {myReg.checkedInAt ? (
-      <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 text-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em]">
-        <Check size={14} /> Checked in
-      </span>
-    ) : (
-      <>
-        <span className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-          <Check size={14} /> Booked
-        </span>
-        <button
-          onClick={handleCheckIn}
-          disabled={!windowOpen}
-          title={!windowOpen ? "Check-in opens 30 min before the run" : undefined}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
-        >
-          <MapPinned size={14} /> Check in
-        </button>
-      </>
-    )}
-    <button
-      onClick={() => { cancelSignup(myReg.id); toast("Booking cancelled."); }}
-      className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-destructive hover:text-destructive"
-    >
-      Cancel
-    </button>
-  </>
+
+          /* Not logged in — show login/join prompt instead of sign-up */
+          ) : !isLoggedIn ? (
+            <div className="w-full rounded-2xl border border-border bg-secondary/30 px-5 py-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                You need an account to sign up for events.
+              </p>
+              <div className="flex gap-2">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground active:scale-95 transition-transform"
+                >
+                  <LogIn size={13} /> Log in
+                </Link>
+                <Link
+                  to="/join"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-primary active:scale-95 transition-all"
+                >
+                  Join free
+                </Link>
+              </div>
+            </div>
+
+          /* Already registered */
+          ) : myReg ? (
+            <>
+{myReg.checkedInAt ? (
+                <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 text-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em]">
+                  <Check size={14} /> Checked in
+                </span>
+              ) : checkInClosed ? (
+                <div className="w-full rounded-2xl border border-border bg-secondary/30 px-5 py-4">
+                  <p className="text-sm text-muted-foreground">
+                    Check-in window has closed for this event. If you attended but
+                    weren't checked in, please contact an organiser or visit the{" "}
+                    <Link to="/membership" className="text-primary underline">
+                      admin desk
+                    </Link>{" "}
+                    so they can check you in manually.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                    <Check size={14} /> Booked
+                  </span>
+              <button
+  onClick={handleCheckIn}
+  disabled={!windowOpen || checkingIn}
+  title={!windowOpen ? "Check-in opens 30 min before the event" : undefined}
+  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none active:scale-95 transition-transform"
+>
+  {checkingIn ? <Loader2 size={14} className="animate-spin" /> : <MapPinned size={14} />}
+  {checkingIn ? "Checking in…" : "Scan to check in"}
+</button>
+                </>
+              )}
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-destructive hover:text-destructive active:scale-95 transition-all disabled:opacity-50"
+              >
+                {cancelling ? <Loader2 size={14} className="animate-spin" /> : null}
+                {cancelling ? "Cancelling…" : "Cancel"}
+              </button>
+            </>
+
+          /* Logged in, not yet registered */
+          ) : registrationClosed ? (
+            <span className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <Lock size={14} /> Registration closed
+            </span>
           ) : (
-            <button disabled={!accepted} onClick={() => setSignupOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed">
+            <button
+              disabled={!accepted}
+              onClick={() => setSignupOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-transform"
+            >
               Sign up
             </button>
           )}
-          <button onClick={() => setAttendOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-primary">
+
+          <button
+            onClick={() => setAttendOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] hover:border-primary active:scale-95 transition-all"
+          >
             <Users size={14} /> Attendees ({attendees.length})
           </button>
         </div>
-
-        {!currentMember && !currentOpen && !blocked && (
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Tip: <Link to="/join" className="text-primary underline">Join</Link> or <Link to="/login" className="text-primary underline">log in</Link> to track races and earn rewards.
-          </p>
-        )}
       </div>
 
+      {/* ── Sign-up modal ── */}
       {signupOpen && (
-        <Modal onClose={() => setSignupOpen(false)}>
+        <Modal onClose={() => !signingUp && setSignupOpen(false)}>
           <div className="display text-2xl">Confirm spot</div>
-          <p className="text-sm text-muted-foreground mt-1">{e.title} · {new Date(e.date).toDateString()}</p>
-          <form onSubmit={handleSignup} className="mt-5 space-y-3">
+          <p className="text-sm text-muted-foreground mt-1">
+            {e.title} · {new Date(e.date).toDateString()}
+          </p>
+
+          {currentMember && profileLoaded && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2 text-[11px] text-primary">
+              <ShieldCheck size={13} />
+              Emergency details loaded from your member profile.
+            </div>
+          )}
+
+          <form onSubmit={handleSignup} className="mt-4 space-y-3">
             <Field label="Full name" value={name} onChange={setName} required />
-            <Field label="Contact number" value={contact} onChange={setContact} required />
-            <Field label="Emergency contact" value={emergency} onChange={setEmergency} required />
-            <button className="w-full rounded-full bg-primary px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground">Confirm booking</button>
+
+            <div>
+              <Field
+                label="Contact number"
+                value={contact}
+                onChange={(v) => { setContact(v); if (contactError) validateContact(v); }}
+                type="tel"
+                required
+                locked={!!currentMember && !!contact}
+              />
+              {contactError && <p className="mt-1 text-[11px] text-destructive">{contactError}</p>}
+            </div>
+
+            <Field
+              label="Emergency contact name"
+              value={emergencyName}
+              onChange={setEmergencyName}
+              required
+              locked={!!currentMember && !!emergencyName}
+            />
+
+            <div>
+              <Field
+                label="Emergency contact number"
+                value={emergencyNumber}
+                onChange={(v) => { setEmergencyNumber(v); if (emergencyNumberError) validateEmergencyNumber(v); }}
+                type="tel"
+                required
+                locked={!!currentMember && !!emergencyNumber}
+              />
+              {emergencyNumberError && <p className="mt-1 text-[11px] text-destructive">{emergencyNumberError}</p>}
+            </div>
+
+            {currentMember && (emergencyName || emergencyNumber) && (
+              <p className="text-[11px] text-muted-foreground">
+                Wrong details?{" "}
+                <Link to="/membership" className="text-primary underline">Update your profile</Link>.
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={signingUp}
+              className="w-full rounded-full bg-primary px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground inline-flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+            >
+              {signingUp ? <><Loader2 size={14} className="animate-spin" />Confirming…</> : "Confirm booking"}
+            </button>
           </form>
         </Modal>
       )}
 
+      {/* ── Attendees modal ── */}
       {attendOpen && (
         <Modal onClose={() => setAttendOpen(false)}>
-          <div className="display text-2xl">Who's running</div>
+          <div className="display text-2xl">Who's coming</div>
           <p className="text-sm text-muted-foreground mt-1">{e.title}</p>
           {attendees.length === 0 ? (
             <p className="mt-6 text-sm text-muted-foreground">No one signed up yet. Be the first.</p>
@@ -201,10 +605,12 @@ function EventCard({ e }: { e: Event }) {
                 <li key={a.id} className="flex items-center justify-between py-3 text-sm">
                   <span className="flex items-center gap-2">
                     {a.name}
-                    {a.checkedInAt && <span className="text-[10px] uppercase tracking-widest text-primary">· in</span>}
+                    {a.checkedInAt && (
+                      <span className="text-[10px] uppercase tracking-widest text-primary">· in</span>
+                    )}
                   </span>
                   <span className={`text-[10px] uppercase tracking-[0.2em] ${a.openRunner ? "text-muted-foreground" : "text-primary"}`}>
-                    {a.openRunner ? "Open Runner" : a.tier ?? "Member"}
+                    {a.openRunner ? "Open Runner" : (a.tier ?? "Member")}
                   </span>
                 </li>
               ))}
@@ -212,35 +618,191 @@ function EventCard({ e }: { e: Event }) {
           )}
         </Modal>
       )}
+      {/* ── Check-in QR scanner modal ── */}
+      {scannerOpen && (
+        <CheckInScanModal
+          onSuccess={async () => {
+            setScannerOpen(false);
+            await doCheckIn();
+          }}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </article>
-  );
+      );
 }
 
 function Info({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
   return (
     <div className="rounded-lg bg-secondary/40 p-3">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground"><Icon size={12} /> {label}</div>
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        <Icon size={12} /> {label}
+      </div>
       <div className="mt-1 text-foreground">{value}</div>
     </div>
   );
 }
 
-function Field({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
+function Field({
+  label, value, onChange, required, type = "text", locked = false,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  required?: boolean; type?: string; locked?: boolean;
+}) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</span>
-      <input value={value} required={required} onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <span className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        <span>{label}{required && " *"}</span>
+        {locked && (
+          <span className="flex items-center gap-1 text-primary normal-case tracking-normal font-normal">
+            <ShieldCheck size={11} /> From profile
+          </span>
+        )}
+      </span>
+      <input
+        value={value}
+        required={required}
+        type={type}
+        readOnly={locked}
+        onChange={(e) => !locked && onChange(e.target.value)}
+        className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors ${
+          locked
+            ? "border-border bg-secondary/40 text-muted-foreground cursor-default select-none"
+            : "border-border bg-background focus:border-primary"
+        }`}
+      />
     </label>
   );
 }
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur p-4" onClick={onClose}>
-      <div className="relative w-full max-w-md rounded-3xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X size={18} /></button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md rounded-3xl border border-border bg-card p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+        >
+          <X size={18} />
+        </button>
         {children}
+      </div>
+    </div>
+  );
+}
+
+function CheckInScanModal({
+  onSuccess,
+  onClose,
+}: {
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animRef = useRef<number | null>(null);
+  const [error, setError] = useState("");
+
+  function stopCamera() {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
+  function scanLoop() {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
+      animRef.current = requestAnimationFrame(scanLoop);
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(video, 0, 0);
+    // @ts-ignore
+    if ("BarcodeDetector" in window) {
+      // @ts-ignore
+      new window.BarcodeDetector({ formats: ["qr_code"] })
+        .detect(canvas)
+        .then((codes: any[]) => {
+          if (codes.length > 0) {
+            const value = codes[0].rawValue;
+            stopCamera();
+            if (value === "LFR-CHECKIN") {
+              onSuccess();
+            } else {
+              toast.error("Wrong QR code. Ask the organiser for the check-in code.");
+              onClose();
+            }
+          } else {
+            animRef.current = requestAnimationFrame(scanLoop);
+          }
+        })
+        .catch(() => { animRef.current = requestAnimationFrame(scanLoop); });
+    } else {
+      setError("QR scanning isn't supported on this browser. Ask the organiser to check you in manually.");
+      stopCamera();
+    }
+  }
+
+  useEffect(() => {
+    async function start() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          scanLoop();
+        }
+      } catch {
+        setError("Camera access denied. Please allow camera access and try again.");
+      }
+    }
+    start();
+    return () => stopCamera();
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-sm rounded-3xl border border-border bg-card p-6 flex flex-col items-center gap-5"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        <button
+          onClick={() => { stopCamera(); onClose(); }}
+          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+        >
+          <X size={18} />
+        </button>
+        <div className="text-center">
+          <div className="display text-xl">Check in</div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Point your camera at the organiser's QR code.
+          </p>
+        </div>
+        {error ? (
+          <p className="text-xs text-destructive text-center">{error}</p>
+        ) : (
+          <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-black">
+            <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-48 h-48 border-2 border-primary rounded-xl" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

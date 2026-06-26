@@ -1,7 +1,13 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { BrowserRouter, Routes, Route, Link, Outlet } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
-import { StoreProvider } from "@/lib/store";
+
+import { StoreProvider, useStore } from "@/lib/store";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
+
 import Home from "@/pages/Home";
 import Events from "@/pages/Events";
 import RunningClub from "@/pages/RunningClub";
@@ -9,8 +15,44 @@ import Membership from "@/pages/Membership";
 import Join from "@/pages/Join";
 import Login from "@/pages/Login";
 import Admin from "@/pages/Admin";
+import ScrollToTop from "@/components/ScrollToTop";
+import NotificationsPage from "@/pages/Notifications";
+import Gallery from "@/pages/Gallery";
+import Privacy from "@/pages/Privacy";
+import Support from "@/pages/Support";
 
 const queryClient = new QueryClient();
+
+function AuthStoreSync() {
+  const { user, role, loading } = useAuth();
+  const { syncAuthUser } = useStore();
+
+  const syncRef = useRef(syncAuthUser);
+  useEffect(() => { syncRef.current = syncAuthUser; });
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      syncRef.current(null, null, null);
+      return;
+    }
+    const profileEmail = user.email;
+    if (!profileEmail) return;
+    syncRef.current(profileEmail, user.displayName ?? null, role ?? null);
+  }, [loading, user, role]);
+
+  return null;
+}
+
+function Layout() {
+  return (
+    <>
+      <SiteHeader />
+      <Outlet />
+      <SiteFooter />
+    </>
+  );
+}
 
 function NotFound() {
   return (
@@ -18,7 +60,10 @@ function NotFound() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold">Page not found</h2>
-        <Link to="/" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+        <Link
+          to="/"
+          className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
           Go home
         </Link>
       </div>
@@ -29,21 +74,32 @@ function NotFound() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <StoreProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/events" element={<Events />} />
-            <Route path="/running-club" element={<RunningClub />} />
-            <Route path="/membership" element={<Membership />} />
-            <Route path="/join" element={<Join />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-        <Toaster theme="dark" position="top-center" richColors />
-      </StoreProvider>
+      <BrowserRouter>
+        <StoreProvider>
+          <AuthProvider>
+            <AuthStoreSync />
+            <ScrollToTop />
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Home />} />
+                <Route path="/events" element={<Events />} />
+                <Route path="/running-club" element={<RunningClub />} />
+                <Route path="/membership" element={<Membership />} />
+                <Route path="/join" element={<Join />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/gallery" element={<Gallery />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/support" element={<Support />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+              {/* Admin has its own layout */}
+              <Route path="/admin" element={<Admin />} />
+            </Routes>
+            <Toaster theme="dark" position="top-center" richColors />
+          </AuthProvider>
+        </StoreProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }

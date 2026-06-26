@@ -1,21 +1,73 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, CalendarDays, Trophy, User } from "lucide-react";
+import { Home, CalendarDays, Trophy, User, Images } from "lucide-react";
+import { useStore } from "@/lib/store";
+import { useAuth } from "@/context/AuthContext";
 
 const tabs = [
   { to: "/", label: "Home", icon: Home, exact: true },
   { to: "/events", label: "Events", icon: CalendarDays },
-  { to: "/running-club", label: "Club", icon: User },
+  { to: "/running-club", label: "LFR Club", icon: User },
+  { to: "/gallery", label: "Gallery", icon: Images },
   { to: "/membership", label: "Rewards", icon: Trophy },
 ];
 
 export function SiteFooter() {
   const { pathname } = useLocation();
+  const { currentMember, currentOpen } = useStore();
+  const { user } = useAuth();
+  const loggedIn = Boolean(user || currentMember || currentOpen);
+
   return (
     <>
+      {/* ── Desktop footer ── */}
+      <footer className="hidden md:block border-t border-border mt-16">
+        <div className="mx-auto max-w-6xl px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-3">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            © {new Date().getFullYear()} Waven Harper Fitness. All rights reserved.
+          </div>
+          <div className="flex items-center gap-4 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            <Link to="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
+            {!loggedIn && <>
+              <span className="opacity-30">·</span>
+              <Link to="/admin" className="hover:text-foreground transition">Staff</Link>
+            </>}
+             <span className="opacity-30">·</span>
+                        <Link to="/support" className="hover:text-foreground transition">Support</Link>
+
+            <span className="opacity-30">·</span>
+            <a href="https://dsmart.co.za" target="_blank" rel="noreferrer" className="hover:text-foreground transition">
+              Built by Digismart
+            </a>
+          </div>
+        </div>
+      </footer>
+
+      {/* ── Mobile footer ── */}
+      <footer className="md:hidden border-t border-border">
+        <div className="mx-auto max-w-6xl px-8 py-6 flex flex-col items-center gap-3">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            © {new Date().getFullYear()} Waven Harper Fitness. All rights reserved.
+          </div>
+<div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-center">            <Link to="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
+            {!loggedIn && <>
+              <span className="opacity-30">·</span>
+              <Link to="/admin" className="hover:text-foreground transition">Staff</Link>
+            </>}
+            <span className="opacity-30">·</span>
+                        <Link to="/support" className="hover:text-foreground transition">Support</Link>
+
+                        <span className="opacity-30">·</span>
+            <a href="https://dsmart.co.za" target="_blank" rel="noreferrer" className="hover:text-foreground transition">
+              Built by Digismart
+            </a>
+          </div>
+        </div>
+      </footer>
+
       <div aria-hidden className="h-28 md:hidden" />
       <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none md:hidden">
         <div className="mx-auto max-w-md px-4 pb-4 pointer-events-auto">
-          <div className="rounded-2xl border border-border bg-card/90 backdrop-blur-xl shadow-glow px-2 py-2 grid grid-cols-4 gap-1">
+          <div className="rounded-2xl border border-border bg-card/90 backdrop-blur-xl shadow-glow px-2 py-2 grid grid-cols-5 gap-1">
             {tabs.map((t) => {
               const active = t.exact ? pathname === t.to : pathname.startsWith(t.to);
               const Icon = t.icon;

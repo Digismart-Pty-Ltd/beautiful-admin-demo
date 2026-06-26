@@ -1,14 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  events as seedEvents,
-  members as seedMembers,
-  openRunners as seedOpenRunners,
-  rewards as seedRewards,
-  type Event,
-  type Member,
-  type Reward,
-  type Tier,
-} from "./demo-data";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
+import { subscribeToEvents } from "./eventService";
+import { signInAsAdmin } from "@/services/authService";
+import type { Event, Member, Reward, Tier } from "./demo-data";
 
 const KEY = "whf:store:v1";
 
@@ -21,14 +16,14 @@ export type CurrentUser =
 export type Registration = {
   id: string;
   eventId: string;
-  userId: string;        // member id, open id, or "guest:<name>"
+  userId: string;
   name: string;
   tier?: Tier;
   openRunner?: boolean;
   contact?: string;
   emergency?: string;
-  acceptedAt: string;    // ISO
-  checkedInAt?: string;  // ISO
+  acceptedAt: string;
+  checkedInAt?: string;
 };
 
 export type Redemption = { id: string; rewardId: string; memberId: string; at: string };
@@ -45,21 +40,11 @@ type State = {
 };
 
 const initial: State = {
-  events: seedEvents,
-  members: seedMembers,
-  openRunners: seedOpenRunners,
-  rewards: seedRewards,
-  registrations: seedEvents.flatMap((e) =>
-    e.attendees.map((a, i) => ({
-      id: `${e.id}-seed-${i}`,
-      eventId: e.id,
-      userId: a.openRunner ? `open:${a.name}` : `member:${a.name}`,
-      name: a.name,
-      tier: a.tier,
-      openRunner: a.openRunner,
-      acceptedAt: new Date().toISOString(),
-    }))
-  ),
+  events: [],
+  members: [],
+  openRunners: [],
+  rewards: [],
+  registrations: [],
   redemptions: [],
   currentUserId: null,
   currentUserKind: null,
@@ -69,9 +54,9 @@ function load(): State {
   if (typeof window === "undefined") return initial;
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return initial;
-    const parsed = JSON.parse(raw);
-    return { ...initial, ...parsed };
+    const isAdmin = localStorage.getItem("wh_admin") === "1";
+    const base = raw ? { ...initial, ...JSON.parse(raw) } : initial;
+    return isAdmin ? { ...base, currentUserKind: "admin", currentUserId: null } : base;
   } catch {
     return initial;
   }
@@ -80,15 +65,29 @@ function load(): State {
 function save(s: State) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    const { currentUserId, currentUserKind, ...rest } = s;
+    localStorage.setItem(KEY, JSON.stringify(rest));
+    if (currentUserKind === "admin") {
+      localStorage.setItem("wh_admin", "1");
+    } else {
+      localStorage.removeItem("wh_admin");
+    }
   } catch {}
+}
+
+function toIsoDate(value: any) {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  if (typeof value === "string") return value.slice(0, 10);
+  if (typeof value.toDate === "function") return value.toDate().toISOString().slice(0, 10);
+  if (value.seconds) return new Date(value.seconds * 1000).toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
 }
 
 export function tierFor(races: number): Tier {
   if (races >= 36) return "Platinum";
   if (races >= 24) return "Gold";
   if (races >= 12) return "Silver";
-  return "Bronze";
+  return "Pink";
 }
 
 export function nextTierInfo(races: number) {
@@ -102,22 +101,20 @@ type Ctx = {
   currentMember: Member | null;
   currentOpen: { id: string; name: string; email: string; lastRun: string } | null;
   currentUser: CurrentUser;
-  // auth
   registerMember: (input: { name: string; email: string }) => Member;
   registerOpenRunner: (input: { name: string; email: string }) => { id: string; name: string; email: string; lastRun: string };
   loginByEmail: (email: string) => boolean;
-  loginAdmin: () => void;
+  loginAdmin: () => Promise<void>;
   logout: () => void;
-  // events
   signUpForEvent: (eventId: string, fields: { name: string; contact: string; emergency: string }) => Registration | null;
   cancelSignup: (registrationId: string) => void;
   checkIn: (eventId: string) => Registration | null;
   attendeesFor: (eventId: string) => Registration[];
   myRegistrationFor: (eventId: string) => Registration | undefined;
-  // rewards
+  setEvents: (events: Event[]) => void;
   redeem: (rewardId: string) => void;
   myRedemptions: () => Redemption[];
-  // admin
+  syncAuthUser: (email: string | null, displayName: string | null, role: string | null) => void;
   createEvent: (e: Omit<Event, "id" | "attendees">) => void;
   updateEvent: (id: string, patch: Partial<Event>) => void;
   deleteEvent: (id: string) => void;
@@ -132,13 +129,90 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>(initial);
   const [hydrated, setHydrated] = useState(false);
 
+  const mutate = useCallback((fn: (s: State) => State) => setState((s) => fn(s)), []);
+
   useEffect(() => {
     setState(load());
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const unsubscribeEvents = subscribeToEvents((events) => {
+      mutate((s) => ({ ...s, events }));
+    });
+
+    const unsubscribeUsers = onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        const members: Member[] = [];
+        const openRunners: { id: string; name: string; email: string; lastRun: string }[] = [];
+
+        snap.docs.forEach((doc) => {
+          const data = doc.data() as any;
+          if (data.role === "member") {
+            members.push({
+              id: doc.id,
+              name: data.name || "",
+              email: data.email || "",
+              joined: toIsoDate(data.joined || data.createdAt),
+              races: data.races ?? 0,
+              tier: data.tier ?? "Pink",
+              rewardsPending: data.rewardsPending ?? 0,
+            });
+          }
+          if (data.role === "open") {
+            openRunners.push({
+              id: doc.id,
+              name: data.name || "",
+              email: data.email || "",
+              lastRun: toIsoDate(data.lastRun || data.createdAt),
+            });
+          }
+        });
+
+        mutate((s) => ({ ...s, members, openRunners }));
+      },
+      (err) => {
+        console.warn("users snapshot error (may resolve after sign-in):", err.code);
+      }
+    );
+
+    return () => {
+      unsubscribeEvents();
+      unsubscribeUsers();
+    };
+  }, [hydrated, mutate]);
+
   useEffect(() => { if (hydrated) save(state); }, [state, hydrated]);
 
-  const mutate = useCallback((fn: (s: State) => State) => setState((s) => fn(s)), []);
+  // ── Stable syncAuthUser — reads state inside the updater, never in deps ──
+  const syncAuthUser = useCallback(
+    (email: string | null, displayName: string | null, role: string | null) => {
+      mutate((s) => {
+        if (s.currentUserKind === "admin") return s;
+        const normalizedEmail = email?.trim().toLowerCase() ?? null;
+        if (!normalizedEmail) {
+          if (s.currentUserId === null && s.currentUserKind === null) return s;
+          return { ...s, currentUserId: null, currentUserKind: null };
+        }
+        const existingMember = s.members.find((m) => m.email.toLowerCase() === normalizedEmail);
+        if (existingMember) {
+          if (s.currentUserId === existingMember.id && s.currentUserKind === "member") return s;
+          return { ...s, currentUserId: existingMember.id, currentUserKind: "member" };
+        }
+        const existingOpen = s.openRunners.find((o) => o.email.toLowerCase() === normalizedEmail);
+        if (existingOpen) {
+          if (s.currentUserId === existingOpen.id && s.currentUserKind === "open") return s;
+          return { ...s, currentUserId: existingOpen.id, currentUserKind: "open" };
+        }
+        if (s.currentUserId === null && s.currentUserKind === null) return s;
+        return { ...s, currentUserId: null, currentUserKind: null };
+      });
+    },
+    [mutate]
+  ); // ← semicolon, not comma
 
   const currentMember = useMemo(
     () => state.currentUserKind === "member" ? state.members.find((m) => m.id === state.currentUserId) ?? null : null,
@@ -158,21 +232,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     currentMember,
     currentOpen,
     currentUser,
+    syncAuthUser,
+
     registerMember: ({ name, email }) => {
       const m: Member = {
-        id: `m-${Date.now()}`,
-        name, email,
+        id: `m-${Date.now()}`, name, email,
         joined: new Date().toISOString().slice(0, 10),
-        races: 0, tier: "Bronze", rewardsPending: 0,
+        races: 0, tier: "Pink", rewardsPending: 0,
       };
       mutate((s) => ({ ...s, members: [...s.members, m], currentUserId: m.id, currentUserKind: "member" }));
       return m;
     },
+
     registerOpenRunner: ({ name, email }) => {
       const o = { id: `o-${Date.now()}`, name, email, lastRun: new Date().toISOString().slice(0, 10) };
       mutate((s) => ({ ...s, openRunners: [...s.openRunners, o], currentUserId: o.id, currentUserKind: "open" }));
       return o;
     },
+
     loginByEmail: (email) => {
       const m = state.members.find((x) => x.email.toLowerCase() === email.toLowerCase());
       if (m) { mutate((s) => ({ ...s, currentUserId: m.id, currentUserKind: "member" })); return true; }
@@ -180,7 +257,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (o) { mutate((s) => ({ ...s, currentUserId: o.id, currentUserKind: "open" })); return true; }
       return false;
     },
-    loginAdmin: () => mutate((s) => ({ ...s, currentUserKind: "admin", currentUserId: null })),
+
+    loginAdmin: async () => {
+      await signInAsAdmin();
+      mutate((s) => ({ ...s, currentUserKind: "admin", currentUserId: null }));
+    },
+
     logout: () => mutate((s) => ({ ...s, currentUserId: null, currentUserKind: null })),
 
     signUpForEvent: (eventId, fields) => {
@@ -189,12 +271,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const isMember = state.currentUserKind === "member";
       if (event.membersOnly && !isMember) return null;
       const userId = currentMember?.id ?? currentOpen?.id ?? `guest:${fields.name}`;
-      // prevent duplicate
       if (state.registrations.find((r) => r.eventId === eventId && r.userId === userId)) return null;
       const reg: Registration = {
-        id: `reg-${Date.now()}`,
-        eventId,
-        userId,
+        id: `reg-${Date.now()}`, eventId, userId,
         name: currentMember?.name ?? currentOpen?.name ?? fields.name,
         tier: currentMember?.tier,
         openRunner: !currentMember,
@@ -205,7 +284,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutate((s) => ({ ...s, registrations: [...s.registrations, reg] }));
       return reg;
     },
+
     cancelSignup: (id) => mutate((s) => ({ ...s, registrations: s.registrations.filter((r) => r.id !== id) })),
+
     checkIn: (eventId) => {
       const uid = currentMember?.id ?? currentOpen?.id;
       if (!uid) return null;
@@ -230,12 +311,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return updatedReg;
     },
+
     attendeesFor: (eventId) => state.registrations.filter((r) => r.eventId === eventId),
+
     myRegistrationFor: (eventId) => {
       const uid = currentMember?.id ?? currentOpen?.id;
       if (!uid) return undefined;
       return state.registrations.find((r) => r.eventId === eventId && r.userId === uid);
     },
+
+    setEvents: (events) => mutate((s) => ({ ...s, events })),
 
     redeem: (rewardId) => {
       if (!currentMember) return;
@@ -244,6 +329,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         redemptions: [...s.redemptions, { id: `rd-${Date.now()}`, rewardId, memberId: currentMember.id, at: new Date().toISOString() }],
       }));
     },
+
     myRedemptions: () => currentMember ? state.redemptions.filter((r) => r.memberId === currentMember.id) : [],
 
     createEvent: (e) => mutate((s) => ({ ...s, events: [...s.events, { ...e, id: `evt-${Date.now()}`, attendees: [] }] })),
