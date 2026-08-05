@@ -36,6 +36,7 @@ import {
 } from "firebase/firestore";
 import { Html5Qrcode } from "html5-qrcode";
 import { db } from "@/lib/firebase";
+import { subscribeToSponsors, type Sponsor } from "@/lib/sponsorService";
 import { useAuth } from "@/context/AuthContext";
 
 export default function Events() {
@@ -120,6 +121,8 @@ export default function Events() {
           </div>
         )}
       </section>
+
+      <SponsorsBanner />
     </div>
   );
 }
@@ -127,7 +130,64 @@ export default function Events() {
 function isValidPhone(value: string) {
   return /^[+]?[\d\s\-().]{7,15}$/.test(value.trim());
 }
+function SponsorsBanner() {
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
 
+  useEffect(() => {
+    const unsub = subscribeToSponsors(setSponsors);
+    return () => unsub();
+  }, []);
+
+  if (sponsors.length === 0) return null;
+
+  const loopedSponsors = [...sponsors, ...sponsors];
+
+  return (
+    <section className="mt-24 mb-16">
+      <div className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 text-center mb-8">
+        <div className="text-xs uppercase tracking-[0.3em] text-primary">Proudly supported by</div>
+        <h2 className="mt-2 display text-3xl md:text-5xl">Our sponsors.</h2>
+      </div>
+
+      <div className="relative overflow-hidden py-6 border-y border-border bg-card">
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-16 md:w-32 bg-gradient-to-r from-card to-transparent z-10" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-16 md:w-32 bg-gradient-to-l from-card to-transparent z-10" />
+
+        <div className="flex w-max animate-marquee gap-10 md:gap-16">
+          {loopedSponsors.map((s, i) => (
+            <a
+              key={`${s.id}-${i}`}
+              href={s.websiteUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="shrink-0 flex items-center justify-center h-20 w-40 md:h-24 md:w-48 transition duration-300 hover:scale-110"
+              title={s.name}
+            >
+              <img
+                src={s.logoUrl}
+                alt={s.name}
+                className="max-h-full max-w-full w-auto h-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+              />
+            </a>
+          ))}
+        </div>
+
+        <style>{`
+          @keyframes marquee-scroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+          }
+          .animate-marquee {
+            animation: marquee-scroll 30s linear infinite;
+          }
+          .animate-marquee:hover {
+            animation-play-state: paused;
+          }
+        `}</style>
+      </div>
+    </section>
+  );
+}
 function EventCard({ e }: { e: Event }) {
   const { currentMember, currentOpen, state } = useStore();
   const { user, loading: authLoading } = useAuth();

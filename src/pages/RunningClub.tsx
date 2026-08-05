@@ -4,6 +4,7 @@ import community from "@/assets/community.jpg";
 import { useEffect, useState, type FormEvent } from "react";
 import { ShoppingBag, X, Check, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import tshirt1 from "@/assets/Tshirt-1.jpeg";
 import tshirt2 from "@/assets/Tshirt-2.jpeg";
 import socks from "@/assets/socks.jpeg";
@@ -22,7 +23,6 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
-import { subscribeToSponsors, type Sponsor } from "@/lib/sponsorService";
 
 // ─── Firebase / notification config ────────────────────────────────────────────
 // Requires the "Trigger Email from Firestore" extension installed, watching the
@@ -143,6 +143,8 @@ export default function RunningClub() {
   }, []);
   const [orderOpen, setOrderOpen] = useState(false);
 
+  const { user } = useAuth();
+
   return (
     <div className="min-h-screen bg-background">
       {/* ── Hero ── */}
@@ -167,27 +169,43 @@ export default function RunningClub() {
         </div>
       </section>
 
-            {/* ── Join CTA ── */}
-      <section className="mx-auto max-w-4xl px-5 mt-6 pb-16 text-center">
-        <h2 className="display text-3xl">Join the club.</h2>
-        <p className="mt-2 text-muted-foreground">
-         Membership is currently free. Join us, meet the community, and enjoy every run.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3 justify-center">
-          <Link
-            to="/join"
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow"
-          >
-            Join the club
-          </Link>
-          <Link
-            to="/events"
-            className="inline-flex items-center gap-2 rounded-full border border-border px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] hover:border-primary"
-          >
-            See events
-          </Link>
-        </div>
-      </section>
+      {!user ? (
+        <section className="mx-auto max-w-4xl px-5 mt-6 pb-16 text-center">
+          <h2 className="display text-3xl">Join the club.</h2>
+          <p className="mt-2 text-muted-foreground">
+            Membership is currently free. Join us, meet the community, and enjoy every run.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3 justify-center">
+            <Link
+              to="/join"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow"
+            >
+              Join the club
+            </Link>
+            <Link
+              to="/events"
+              className="inline-flex items-center gap-2 rounded-full border border-border px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] hover:border-primary"
+            >
+              See events
+            </Link>
+          </div>
+        </section>
+      ) : (
+        <section className="mx-auto max-w-4xl px-5 mt-6 pb-16 text-center">
+          <h2 className="display text-3xl">See the next runs.</h2>
+          <p className="mt-2 text-muted-foreground">
+            You're already part of the club. Check out upcoming events and stay active.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3 justify-center">
+            <Link
+              to="/events"
+              className="inline-flex items-center gap-2 rounded-full border border-border px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] hover:border-primary"
+            >
+              See events
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* ── About ── */}
       <section className="mx-auto max-w-5xl px-5 md:px-8 mt-10">
@@ -278,77 +296,12 @@ export default function RunningClub() {
         </p>
       </section>
 
-      {/* ── Sponsors ── */}
-      <SponsorsBanner />
-
       {/* ── Order Modal ── */}
       {orderOpen && <OrderModal onClose={() => setOrderOpen(false)} />}
     </div>
   );
 }
 
-// ─── sponsors banner ────────────────────────────────────────────────────────
-
-function SponsorsBanner() {
-  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-
-  useEffect(() => {
-    const unsub = subscribeToSponsors(setSponsors);
-    return () => unsub();
-  }, []);
-
-  if (sponsors.length === 0) return null;
-
-  // Duplicate the list so the marquee loops seamlessly
-  const loopedSponsors = [...sponsors, ...sponsors];
-
-  return (
-    <section className="mt-24 mb-16">
-      <div className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 text-center mb-8">
-        <div className="text-xs uppercase tracking-[0.3em] text-primary">Proudly supported by</div>
-        <h2 className="mt-2 display text-3xl md:text-5xl">Our sponsors.</h2>
-      </div>
-
-      <div className="relative overflow-hidden py-6 border-y border-border bg-card">
-        {/* Fade edges */}
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-16 md:w-32 bg-gradient-to-r from-card to-transparent z-10" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-16 md:w-32 bg-gradient-to-l from-card to-transparent z-10" />
-
-        <div className="flex w-max animate-marquee gap-10 md:gap-16">
-          {loopedSponsors.map((s, i) => (
-            <a
-            key={`${s.id}-${i}`}
-              href={s.websiteUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="shrink-0 flex items-center justify-center h-20 w-40 md:h-24 md:w-48 transition duration-300 hover:scale-110"
-              title={s.name}
-            >
-              <img
-                src={s.logoUrl}
-                alt={s.name}
-                className="max-h-full max-w-full w-auto h-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-              />
-            </a>
-          ))}
-        </div>
-
-        <style>{`
-          @keyframes marquee-scroll {
-            from { transform: translateX(0); }
-            to { transform: translateX(-50%); }
-          }
-          .animate-marquee {
-            animation: marquee-scroll 30s linear infinite;
-          }
-          .animate-marquee:hover {
-            animation-play-state: paused;
-          }
-        `}</style>
-      </div>
-    </section>
-  );
-}
 // ─── merch card ───────────────────────────────────────────────────────────────
 
 function MerchCard({

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { BrowserRouter, Routes, Route, Link, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, Outlet, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 
@@ -20,6 +20,8 @@ import NotificationsPage from "@/pages/Notifications";
 import Gallery from "@/pages/Gallery";
 import Privacy from "@/pages/Privacy";
 import Support from "@/pages/Support";
+import AdvertiseApply from "@/pages/AdvertiseApply";
+
 
 const queryClient = new QueryClient();
 
@@ -42,6 +44,29 @@ function AuthStoreSync() {
     if (!profileEmail) return;
     syncRef.current(profileEmail, user.displayName ?? null, role ?? null);
   }, [loading, user, role]);
+
+  return null;
+}
+
+function ManifestUpdater() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const manifestUrl = location.pathname.startsWith("/admin")
+      ? "/admin-manifest.json"
+      : "/manifest.json";
+
+    let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!manifestLink) {
+      manifestLink = document.createElement("link");
+      manifestLink.rel = "manifest";
+      document.head.appendChild(manifestLink);
+    }
+
+    if (manifestLink.getAttribute("href") !== manifestUrl) {
+      manifestLink.setAttribute("href", manifestUrl);
+    }
+  }, [location.pathname]);
 
   return null;
 }
@@ -91,6 +116,7 @@ export default function App() {
         <StoreProvider>
           <AuthProvider>
             <AuthStoreSync />
+            <ManifestUpdater />
             <ScrollToTop />
             <Routes>
               <Route element={<Layout />}>
@@ -104,6 +130,7 @@ export default function App() {
                 <Route path="/gallery" element={<Gallery />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/support" element={<Support />} />
+                <Route path="/advertise" element={<AdvertiseApply />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
               {/* Admin has its own layout */}

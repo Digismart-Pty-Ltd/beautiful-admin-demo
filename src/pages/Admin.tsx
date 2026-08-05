@@ -28,7 +28,14 @@ import {
   RefreshCw,
   Bell,
   QrCode,
+  Megaphone,
 } from "lucide-react";
+import {
+  subscribeToAdvertisements,
+  updateAdvertisement,
+  deleteAdvertisement,
+  type Advertisement,
+} from "@/lib/advertService";
 import type { Event, Reward, Tier } from "@/lib/demo-data";
 import {
   subscribeToNotifications,
@@ -69,7 +76,7 @@ import {
   type Sponsor,
 } from "@/lib/sponsorService";
 
-type Tab = "overview" | "events" | "members" | "rewards" | "orders" | "notifications" | "qrcodes" | "sponsors";
+type Tab = "overview" | "events" | "members" | "rewards" | "orders" | "notifications" | "qrcodes" | "sponsors" | "adverts";
 const ADMIN_PASSWORD = "WavenHarper2026";
 
 const tierMeta: Record<Tier, { color: string }> = {
@@ -344,6 +351,7 @@ export default function Admin() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "sponsors", label: "Sponsors", icon: ImagePlus },
+    { id: "adverts", label: "Adverts", icon: Megaphone },
   ];
 
   return (
@@ -492,6 +500,7 @@ export default function Admin() {
           {tab === "notifications" && <NotificationsAdmin />}
           {tab === "qrcodes" && <QRCodesAdmin />}
           {tab === "sponsors" && <SponsorsAdmin />}
+          {tab === "adverts" && <AdvertsAdmin />}
         </div>
       </main>
     </div>
@@ -2580,6 +2589,241 @@ function SponsorModal({
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+
+function AdvertsAdmin() {
+  const [ads, setAds] = useState<Advertisement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeToAdvertisements((rows) => {
+      setAds(rows);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const pending = ads.filter((a) => a.status === "pending");
+  const approved = ads.filter((a) => a.status === "approved");
+  const rejected = ads.filter((a) => a.status === "rejected");
+
+  async function handleApprove(a: Advertisement) {
+    if (
+      !confirm(
+        `Approve "${a.businessName}"? Only do this once payment (R${a.price}, ref ${a.orderNumber}) has been received — this makes the advert live on the homepage immediately.`,
+      )
+    )
+      return;
+    setBusyId(a.id);
+    try {
+      await updateAdvertisement(a.id, { status: "approved", enabled: true });
+      toast.success("Advert approved and live.");
+    } catch {
+      toast.error("Could not approve advert.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReject(a: Advertisement) {
+    if (!confirm(`Reject "${a.businessName}"'s application?`)) return;
+    setBusyId(a.id);
+    try {
+      await updateAdvertisement(a.id, { status: "rejected", enabled: false });
+      toast.success("Application rejected.");
+    } catch {
+      toast.error("Could not update advert.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleToggleEnabled(a: Advertisement) {
+    setBusyId(a.id);
+    try {
+      await updateAdvertisement(a.id, { enabled: !a.enabled });
+      toast.success(a.enabled ? "Advert hidden from homepage." : "Advert live on homepage.");
+    } catch {
+      toast.error("Could not update advert.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(a: Advertisement) {
+    if (!confirm(`Delete "${a.businessName}"'s advert? This cannot be undone.`)) return;
+    setBusyId(a.id);
+    try {
+      await deleteAdvertisement(a.id);
+      toast.success("Advert deleted.");
+    } catch {
+      toast.error("Could not delete advert.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function Row({ a }: { a: Advertisement }) {
+    return (
+      <tr className="hover:bg-secondary/30">
+        <td className="p-4">
+          <div className="w-14 h-12 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-border">
+            <img src={a.logoUrl} alt={a.businessName} className="max-w-full max-h-full object-contain" />
+          </div>
+        </td>
+        <td className="p-4">
+          <div className="font-mono text-[10px] text-primary">{a.orderNumber}</div>
+          <div className="font-medium">{a.businessName}</div>
+          <div className="text-xs text-muted-foreground truncate max-w-[200px]">{a.slogan}</div>
+        </td>
+        <td className="p-4 text-muted-foreground truncate max-w-[180px]">
+          <a href={a.websiteUrl} target="_blank" rel="noreferrer" className="hover:text-primary underline">
+            {a.websiteUrl}
+          </a>
+        </td>
+        <td className="p-4 text-muted-foreground">
+          <div>{a.contactName}</div>
+          <div className="text-xs">{a.contactEmail}</div>
+          <div className="text-xs">{a.contactPhone}</div>
+        </td>
+        <td className="p-4">
+          <span
+            className={`text-[10px] uppercase tracking-widest font-semibold ${a.isMember ? "text-primary" : "text-muted-foreground"}`}
+          >
+            {a.isMember ? "Member" : "Guest"}
+          </span>
+        </td>
+        <td className="p-4 font-mono text-xs">R{a.price}/mo</td>
+        <td className="p-4">
+          {a.status === "pending" && (
+            <span className="text-[10px] uppercase tracking-widest text-amber-500 font-semibold">
+              Pending
+            </span>
+          )}
+          {a.status === "approved" && (
+            <span
+              className={`text-[10px] uppercase tracking-widest font-semibold ${a.enabled ? "text-primary" : "text-muted-foreground"}`}
+            >
+              {a.enabled ? "Live" : "Approved · Hidden"}
+            </span>
+          )}
+          {a.status === "rejected" && (
+            <span className="text-[10px] uppercase tracking-widest text-destructive font-semibold">
+              Rejected
+            </span>
+          )}
+        </td>
+        <td className="p-4 text-right">
+          <div className="flex justify-end gap-2 flex-wrap">
+            {a.status === "pending" && (
+              <>
+                <button
+                  onClick={() => handleApprove(a)}
+                  disabled={busyId === a.id}
+                  title="Approve (payment received)"
+                  className="rounded-md border border-primary/40 text-primary p-2 hover:bg-primary/10 transition active:scale-90 disabled:opacity-40"
+                >
+                  <Check size={13} />
+                </button>
+                <button
+                  onClick={() => handleReject(a)}
+                  disabled={busyId === a.id}
+                  title="Reject"
+                  className="rounded-md border border-border p-2 hover:border-destructive hover:text-destructive transition active:scale-90 disabled:opacity-40"
+                >
+                  <X size={13} />
+                </button>
+              </>
+            )}
+            {a.status === "approved" && (
+              <button
+                onClick={() => handleToggleEnabled(a)}
+                disabled={busyId === a.id}
+                title={a.enabled ? "Disable" : "Enable"}
+                className="rounded-md border border-border p-2 hover:border-primary transition active:scale-90 disabled:opacity-40"
+              >
+                {a.enabled ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            )}
+            <button
+              onClick={() => handleDelete(a)}
+              disabled={busyId === a.id}
+              title="Delete"
+              className="rounded-md border border-border p-2 hover:border-destructive hover:text-destructive transition active:scale-90 disabled:opacity-40"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  function Table({ rows, empty }: { rows: Advertisement[]; empty: string }) {
+    if (rows.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center text-sm text-muted-foreground">
+          {empty}
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[960px]">
+            <thead className="bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
+              <tr>
+                <th className="text-left p-4">Logo</th>
+                <th className="text-left p-4">Ref / Business</th>
+                <th className="text-left p-4">Website</th>
+                <th className="text-left p-4">Contact</th>
+                <th className="text-left p-4">Type</th>
+                <th className="text-left p-4">Price</th>
+                <th className="text-left p-4">Status</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((a) => (
+                <Row key={a.id} a={a} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <div className="display text-lg mb-1">Pending applications ({loading ? "…" : pending.length})</div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Approve only after you've confirmed payment against the reference number.
+        </p>
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+            <Loader2 size={14} className="animate-spin" /> Loading…
+          </div>
+        ) : (
+          <Table rows={pending} empty="No pending applications." />
+        )}
+      </div>
+
+      <div>
+        <div className="display text-lg mb-3">Approved ({approved.length})</div>
+        <Table rows={approved} empty="No approved adverts yet." />
+      </div>
+
+      {rejected.length > 0 && (
+        <div>
+          <div className="display text-lg mb-3">Rejected ({rejected.length})</div>
+          <Table rows={rejected} empty="" />
+        </div>
+      )}
     </div>
   );
 }
