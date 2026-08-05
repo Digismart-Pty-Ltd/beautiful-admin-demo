@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "@/lib/store";
+import { formatDistanceKm } from "@/lib/utils";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import {
@@ -33,8 +34,9 @@ import {
   serverTimestamp,
   onSnapshot,
 } from "firebase/firestore";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Events() {
   const { state, setEvents } = useStore();
@@ -68,13 +70,10 @@ export default function Events() {
   return (
     <div className="min-h-screen bg-background">
       <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-16 pb-10">
-        <div className="text-xs uppercase tracking-[0.3em] text-primary">
-          What's next
-        </div>
+        <div className="text-xs uppercase tracking-[0.3em] text-primary">What's next</div>
         <h1 className="mt-3 display text-4xl md:text-7xl">Events.</h1>
         <p className="mt-4 max-w-xl text-muted-foreground md:text-lg">
-          The next events on the calendar. Book your spot, lace up, see you
-          there.
+          The next events on the calendar. Book your spot, lace up, see you there.
         </p>
       </section>
 
@@ -91,7 +90,9 @@ export default function Events() {
             {upcomingEvents.map((e, i) => (
               <div
                 key={e.id}
-                ref={(el) => { scrollRef.current[e.id] = el; }}
+                ref={(el) => {
+                  scrollRef.current[e.id] = el;
+                }}
                 className={`snap-center shrink-0 w-screen min-h-[calc(100vh-140px)] px-4 md:px-12 flex flex-col justify-start pt-2 pb-10 ${
                   checkinEventId === e.id ? "ring-2 ring-primary/40 rounded-3xl" : ""
                 }`}
@@ -101,9 +102,7 @@ export default function Events() {
                     <span
                       key={j}
                       className={`block rounded-full transition-all ${
-                        j === i
-                          ? "w-5 h-1.5 bg-primary"
-                          : "w-1.5 h-1.5 bg-border"
+                        j === i ? "w-5 h-1.5 bg-primary" : "w-1.5 h-1.5 bg-border"
                       }`}
                     />
                   ))}
@@ -131,6 +130,7 @@ function isValidPhone(value: string) {
 
 function EventCard({ e }: { e: Event }) {
   const { currentMember, currentOpen, state } = useStore();
+  const { user, loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
@@ -141,15 +141,23 @@ function EventCard({ e }: { e: Event }) {
   >([]);
   const [myReg, setMyReg] = useState<{ id: string; checkedInAt?: string } | null>(null);
 
-  const currentUser = currentMember ?? currentOpen;
-  const isLoggedIn = Boolean(currentUser);
+  // Resolve the logged-in user the same way SiteHeader does: prefer the
+  // store's currentMember, but fall back to matching the Firebase auth
+  // user's email against known members. This keeps this component in sync
+  // with the header instead of flashing "not logged in" whenever
+  // currentMember hasn't been hydrated into the store yet (e.g. on refresh).
+  const authEmail = user?.email ?? undefined;
+  const authMember = authEmail
+    ? state.members.find((m) => m.email.toLowerCase() === authEmail.toLowerCase())
+    : null;
+  const effectiveMember = currentMember ?? authMember;
+
+  const currentUser = effectiveMember ?? currentOpen;
+  const isLoggedIn = Boolean(user || currentUser);
 
   useEffect(() => {
     if (!e.id) return;
-    const q = query(
-      collection(db, "eventRegistrations"),
-      where("eventId", "==", e.id)
-    );
+    const q = query(collection(db, "eventRegistrations"), where("eventId", "==", e.id));
     const unsub = onSnapshot(q, (snap) => {
       const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       setAttendees(regs);
@@ -161,54 +169,6 @@ function EventCard({ e }: { e: Event }) {
     return () => unsub();
   }, [e.id, currentUser?.id]);
 
-// ── Check-in reminder notification ──
-useEffect(() => {
-  if (!myReg || myReg.checkedInAt || !currentUser) return;
-
-  const start = new Date(`${e.date}T${e.time}`);
-  const reminderTime = start.getTime() - 30 * 60_000; // 30 min before
-  const now = Date.now();
-  const delay = reminderTime - now;
-
-  // Only schedule if reminder is in the future and within 24 hours
-  if (delay <= 0 || delay > 24 * 60 * 60_000) return;
-
-  const timer = setTimeout(async () => {
-    // Browser notification
-    if ("Notification" in window && Notification.permission === "granted") {
-      const notif = new Notification("Time to check in! 🏃", {
-        body: `${e.title} starts in 30 minutes. Tap to check in.`,
-        icon: "/wh-logo.jpeg",
-        tag: `checkin-${e.id}`,
-      });
-      notif.onclick = () => {
-        window.focus();
-        window.location.href = `/events?checkin=${e.id}`;
-      };
-    }
-
-    // In-app notification (shows in bell + notifications page)
-    try {
-      const { createNotification } = await import("@/lib/notificationService");
-      await createNotification({
-        title: `Check in: ${e.title}`,
-        body: "Your event starts in 30 minutes. Tap to check in now.",
-        audience: "members",
-        link: `/events?checkin=${e.id}`,
-      });
-    } catch {
-      // non-blocking
-    }
-  }, delay);
-
-  // Request permission if not granted
-  if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission();
-  }
-
-  return () => clearTimeout(timer);
-}, [myReg, e.id, e.date, e.time, currentUser]);
-
   const [name, setName] = useState(currentUser?.name ?? "");
   const [contact, setContact] = useState("");
   const [emergencyName, setEmergencyName] = useState("");
@@ -217,9 +177,17 @@ useEffect(() => {
   const [contactError, setContactError] = useState("");
   const [emergencyNumberError, setEmergencyNumberError] = useState("");
 
+  // Keep the name field in sync once we resolve who the user actually is
+  // (covers the case where currentUser wasn't known yet on first render).
   useEffect(() => {
-    if (!currentMember?.id) return;
-    getDoc(doc(db, "users", currentMember.id)).then((snap) => {
+    if (currentUser?.name && !name) setName(currentUser.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.name]);
+
+  useEffect(() => {
+    const memberId = effectiveMember?.id;
+    if (!memberId) return;
+    getDoc(doc(db, "users", memberId)).then((snap) => {
       if (!snap.exists()) return;
       const data = snap.data() as any;
       if (data.contact) setContact(data.contact);
@@ -230,14 +198,14 @@ useEffect(() => {
       }
       setProfileLoaded(true);
     });
-  }, [currentMember?.id]);
+  }, [effectiveMember?.id]);
 
   const [signingUp, setSigningUp] = useState(false);
-const [checkingIn, setCheckingIn] = useState(false);
-const [scannerOpen, setScannerOpen] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-const blocked = e.membersOnly && !currentMember;
+  const blocked = e.membersOnly && !effectiveMember;
 
   const start = new Date(`${e.date}T${e.time}`);
   const now = new Date();
@@ -275,7 +243,8 @@ const blocked = e.membersOnly && !currentMember;
     if (!name.trim()) return toast.error("Please enter your full name.");
     if (!contact.trim()) return toast.error("Please enter your contact number.");
     if (!emergencyName.trim()) return toast.error("Please enter your emergency contact's name.");
-    if (!emergencyNumber.trim()) return toast.error("Please enter your emergency contact's number.");
+    if (!emergencyNumber.trim())
+      return toast.error("Please enter your emergency contact's number.");
 
     setSigningUp(true);
     try {
@@ -290,9 +259,10 @@ const blocked = e.membersOnly && !currentMember;
         name,
         contact,
         emergency: `${emergencyName} — ${emergencyNumber}`,
-        openRunner: !currentMember,
-        tier: (currentMember as any)?.tier ?? null,
+        openRunner: !effectiveMember,
+        tier: (effectiveMember as any)?.tier ?? null,
         checkedInAt: null,
+        reminderSent: false, // ← add this
         createdAt: serverTimestamp(),
       });
 
@@ -306,28 +276,28 @@ const blocked = e.membersOnly && !currentMember;
     }
   }
 
- async function doCheckIn() {
-  if (!myReg) {
-    toast.error("You're not signed up for this event.");
-    return;
+  async function doCheckIn() {
+    if (!myReg) {
+      toast.error("You're not signed up for this event.");
+      return;
+    }
+    setCheckingIn(true);
+    try {
+      await updateDoc(doc(db, "eventRegistrations", myReg.id), {
+        checkedInAt: new Date().toISOString(),
+      });
+      toast.success("Checked in! Event counted.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Check-in failed. Please try again.");
+    } finally {
+      setCheckingIn(false);
+    }
   }
-  setCheckingIn(true);
-  try {
-    await updateDoc(doc(db, "eventRegistrations", myReg.id), {
-      checkedInAt: new Date().toISOString(),
-    });
-    toast.success("Checked in! Event counted.");
-  } catch (err) {
-    console.error(err);
-    toast.error("Check-in failed. Please try again.");
-  } finally {
-    setCheckingIn(false);
-  }
-}
 
-function handleCheckIn() {
-  setScannerOpen(true);
-}
+  function handleCheckIn() {
+    setScannerOpen(true);
+  }
 
   async function handleCancel() {
     if (!myReg) return;
@@ -347,7 +317,9 @@ function handleCheckIn() {
 
   return (
     <article className="group relative overflow-hidden rounded-3xl border border-border bg-card">
-      <div className={`relative overflow-hidden ${(e as any).imageOrientation === "portrait" ? "aspect-[3/4]" : "aspect-[16/9]"}`}>
+      <div
+        className={`relative overflow-hidden ${(e as any).imageOrientation === "portrait" ? "aspect-[3/4]" : "aspect-[16/9]"}`}
+      >
         {e.image ? (
           <img
             src={e.image}
@@ -373,7 +345,7 @@ function handleCheckIn() {
 
       <div className="p-6">
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-primary">
-          <span>{e.distanceKm}K</span>
+          <span>{formatDistanceKm(e.distanceKm)}K</span>
           <span>·</span>
           <span>{new Date(e.date).toDateString()}</span>
         </div>
@@ -402,14 +374,51 @@ function handleCheckIn() {
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
                   "No one is chasing us." — Little Falls Runners NPC
                 </p>
-                <p><strong className="text-foreground">Acknowledgement of Risk.</strong> I acknowledge that participation in running and fitness events involves inherent risks including but not limited to physical injury, illness or death. I voluntarily assume all such risks.</p>
-                <p><strong className="text-foreground">Medical Fitness.</strong> I confirm that I am physically and medically fit to participate in this event. I have consulted a medical professional where necessary and take full responsibility for my health and wellbeing during participation.</p>
-                <p><strong className="text-foreground">Indemnity & Release.</strong> I hereby indemnify and hold harmless Little Falls Runners NPC, Waven Harper Fitness, its directors, organisers, volunteers, sponsors and representatives from any and all claims, damages, losses, costs or expenses arising from my participation, including claims arising from negligence.</p>
-                <p><strong className="text-foreground">Personal Responsibility.</strong> I agree to follow all safety guidance, obey applicable road rules, act responsibly during the event and run or walk within my personal limits at all times.</p>
-                <p><strong className="text-foreground">Voluntary Participation.</strong> I understand that my participation is entirely voluntary. I may withdraw at any time, and accept that I do so at my own risk without claim against the organisers.</p>
-                <p><strong className="text-foreground">Emergency Contact.</strong> I authorise event organisers to obtain emergency medical treatment on my behalf if I am unable to communicate and I acknowledge that associated costs are my own responsibility.</p>
-                <p><strong className="text-foreground">Media Consent.</strong> I consent to photographs and video footage taken at events being used for community communication, social media, and promotional purposes by Little Falls Runners NPC and Waven Harper Fitness.</p>
-                <p><strong className="text-foreground">Governing Law.</strong> This agreement is governed by and construed in accordance with the laws of the Republic of South Africa. Any disputes shall be subject to the jurisdiction of South African courts.</p>
+                <p>
+                  <strong className="text-foreground">Acknowledgement of Risk.</strong> I
+                  acknowledge that participation in running and fitness events involves inherent
+                  risks including but not limited to physical injury, illness or death. I
+                  voluntarily assume all such risks.
+                </p>
+                <p>
+                  <strong className="text-foreground">Medical Fitness.</strong> I confirm that I am
+                  physically and medically fit to participate in this event. I have consulted a
+                  medical professional where necessary and take full responsibility for my health
+                  and wellbeing during participation.
+                </p>
+                <p>
+                  <strong className="text-foreground">Indemnity & Release.</strong> I hereby
+                  indemnify and hold harmless Little Falls Runners NPC, Waven Harper Fitness, its
+                  directors, organisers, volunteers, sponsors and representatives from any and all
+                  claims, damages, losses, costs or expenses arising from my participation,
+                  including claims arising from negligence.
+                </p>
+                <p>
+                  <strong className="text-foreground">Personal Responsibility.</strong> I agree to
+                  follow all safety guidance, obey applicable road rules, act responsibly during the
+                  event and run or walk within my personal limits at all times.
+                </p>
+                <p>
+                  <strong className="text-foreground">Voluntary Participation.</strong> I understand
+                  that my participation is entirely voluntary. I may withdraw at any time, and
+                  accept that I do so at my own risk without claim against the organisers.
+                </p>
+                <p>
+                  <strong className="text-foreground">Emergency Contact.</strong> I authorise event
+                  organisers to obtain emergency medical treatment on my behalf if I am unable to
+                  communicate and I acknowledge that associated costs are my own responsibility.
+                </p>
+                <p>
+                  <strong className="text-foreground">Media Consent.</strong> I consent to
+                  photographs and video footage taken at events being used for community
+                  communication, social media, and promotional purposes by Little Falls Runners NPC
+                  and Waven Harper Fitness.
+                </p>
+                <p>
+                  <strong className="text-foreground">Governing Law.</strong> This agreement is
+                  governed by and construed in accordance with the laws of the Republic of South
+                  Africa. Any disputes shall be subject to the jurisdiction of South African courts.
+                </p>
               </div>
             )}
             <label className="flex items-center gap-2 px-4 pb-3 text-xs cursor-pointer">
@@ -433,9 +442,11 @@ function handleCheckIn() {
             >
               <Lock size={14} /> Members only — Join
             </Link>
-
-          /* Not logged in — show login/join prompt instead of sign-up */
-          ) : !isLoggedIn ? (
+          ) : /* Still resolving auth state — avoid flashing the logged-out UI */
+          authLoading ? (
+            <div className="h-10 w-40 rounded-full bg-secondary/40 animate-pulse" />
+          ) : /* Not logged in — show login/join prompt instead of sign-up */
+          !isLoggedIn ? (
             <div className="w-full rounded-2xl border border-border bg-secondary/30 px-5 py-4">
               <p className="text-sm text-muted-foreground mb-3">
                 You need an account to sign up for events.
@@ -455,19 +466,18 @@ function handleCheckIn() {
                 </Link>
               </div>
             </div>
-
-          /* Already registered */
-          ) : myReg ? (
+          ) : /* Already registered */
+          myReg ? (
             <>
-{myReg.checkedInAt ? (
+              {myReg.checkedInAt ? (
                 <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 text-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em]">
                   <Check size={14} /> Checked in
                 </span>
               ) : checkInClosed ? (
                 <div className="w-full rounded-2xl border border-border bg-secondary/30 px-5 py-4">
                   <p className="text-sm text-muted-foreground">
-                    Check-in window has closed for this event. If you attended but
-                    weren't checked in, please contact an organiser or visit the{" "}
+                    Check-in window has closed for this event. If you attended but weren't checked
+                    in, please contact an organiser or visit the{" "}
                     <Link to="/membership" className="text-primary underline">
                       admin desk
                     </Link>{" "}
@@ -479,15 +489,19 @@ function handleCheckIn() {
                   <span className="inline-flex items-center gap-2 rounded-full border border-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                     <Check size={14} /> Booked
                   </span>
-              <button
-  onClick={handleCheckIn}
-  disabled={!windowOpen || checkingIn}
-  title={!windowOpen ? "Check-in opens 30 min before the event" : undefined}
-  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none active:scale-95 transition-transform"
->
-  {checkingIn ? <Loader2 size={14} className="animate-spin" /> : <MapPinned size={14} />}
-  {checkingIn ? "Checking in…" : "Scan to check in"}
-</button>
+                  <button
+                    onClick={handleCheckIn}
+                    disabled={!windowOpen || checkingIn}
+                    title={!windowOpen ? "Check-in opens 30 min before the event" : undefined}
+                    className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none active:scale-95 transition-transform"
+                  >
+                    {checkingIn ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <MapPinned size={14} />
+                    )}
+                    {checkingIn ? "Checking in…" : "Scan to check in"}
+                  </button>
                 </>
               )}
               <button
@@ -499,9 +513,8 @@ function handleCheckIn() {
                 {cancelling ? "Cancelling…" : "Cancel"}
               </button>
             </>
-
-          /* Logged in, not yet registered */
-          ) : registrationClosed ? (
+          ) : /* Logged in, not yet registered */
+          registrationClosed ? (
             <span className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               <Lock size={14} /> Registration closed
             </span>
@@ -532,7 +545,7 @@ function handleCheckIn() {
             {e.title} · {new Date(e.date).toDateString()}
           </p>
 
-          {currentMember && profileLoaded && (
+          {effectiveMember && profileLoaded && (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2 text-[11px] text-primary">
               <ShieldCheck size={13} />
               Emergency details loaded from your member profile.
@@ -546,10 +559,13 @@ function handleCheckIn() {
               <Field
                 label="Contact number"
                 value={contact}
-                onChange={(v) => { setContact(v); if (contactError) validateContact(v); }}
+                onChange={(v) => {
+                  setContact(v);
+                  if (contactError) validateContact(v);
+                }}
                 type="tel"
                 required
-                locked={!!currentMember && !!contact}
+                locked={!!effectiveMember && !!contact}
               />
               {contactError && <p className="mt-1 text-[11px] text-destructive">{contactError}</p>}
             </div>
@@ -559,25 +575,33 @@ function handleCheckIn() {
               value={emergencyName}
               onChange={setEmergencyName}
               required
-              locked={!!currentMember && !!emergencyName}
+              locked={!!effectiveMember && !!emergencyName}
             />
 
             <div>
               <Field
                 label="Emergency contact number"
                 value={emergencyNumber}
-                onChange={(v) => { setEmergencyNumber(v); if (emergencyNumberError) validateEmergencyNumber(v); }}
+                onChange={(v) => {
+                  setEmergencyNumber(v);
+                  if (emergencyNumberError) validateEmergencyNumber(v);
+                }}
                 type="tel"
                 required
-                locked={!!currentMember && !!emergencyNumber}
+                locked={!!effectiveMember && !!emergencyNumber}
               />
-              {emergencyNumberError && <p className="mt-1 text-[11px] text-destructive">{emergencyNumberError}</p>}
+              {emergencyNumberError && (
+                <p className="mt-1 text-[11px] text-destructive">{emergencyNumberError}</p>
+              )}
             </div>
 
-            {currentMember && (emergencyName || emergencyNumber) && (
+            {effectiveMember && (emergencyName || emergencyNumber) && (
               <p className="text-[11px] text-muted-foreground">
                 Wrong details?{" "}
-                <Link to="/membership" className="text-primary underline">Update your profile</Link>.
+                <Link to="/membership" className="text-primary underline">
+                  Update your profile
+                </Link>
+                .
               </p>
             )}
 
@@ -586,7 +610,14 @@ function handleCheckIn() {
               disabled={signingUp}
               className="w-full rounded-full bg-primary px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground inline-flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
             >
-              {signingUp ? <><Loader2 size={14} className="animate-spin" />Confirming…</> : "Confirm booking"}
+              {signingUp ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Confirming…
+                </>
+              ) : (
+                "Confirm booking"
+              )}
             </button>
           </form>
         </Modal>
@@ -598,7 +629,9 @@ function handleCheckIn() {
           <div className="display text-2xl">Who's coming</div>
           <p className="text-sm text-muted-foreground mt-1">{e.title}</p>
           {attendees.length === 0 ? (
-            <p className="mt-6 text-sm text-muted-foreground">No one signed up yet. Be the first.</p>
+            <p className="mt-6 text-sm text-muted-foreground">
+              No one signed up yet. Be the first.
+            </p>
           ) : (
             <ul className="mt-5 divide-y divide-border max-h-72 overflow-y-auto">
               {attendees.map((a) => (
@@ -606,10 +639,14 @@ function handleCheckIn() {
                   <span className="flex items-center gap-2">
                     {a.name}
                     {a.checkedInAt && (
-                      <span className="text-[10px] uppercase tracking-widest text-primary">· in</span>
+                      <span className="text-[10px] uppercase tracking-widest text-primary">
+                        · in
+                      </span>
                     )}
                   </span>
-                  <span className={`text-[10px] uppercase tracking-[0.2em] ${a.openRunner ? "text-muted-foreground" : "text-primary"}`}>
+                  <span
+                    className={`text-[10px] uppercase tracking-[0.2em] ${a.openRunner ? "text-muted-foreground" : "text-primary"}`}
+                  >
                     {a.openRunner ? "Open Runner" : (a.tier ?? "Member")}
                   </span>
                 </li>
@@ -629,7 +666,7 @@ function handleCheckIn() {
         />
       )}
     </article>
-      );
+  );
 }
 
 function Info({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
@@ -644,15 +681,27 @@ function Info({ icon: Icon, label, value }: { icon: any; label: string; value: s
 }
 
 function Field({
-  label, value, onChange, required, type = "text", locked = false,
+  label,
+  value,
+  onChange,
+  required,
+  type = "text",
+  locked = false,
 }: {
-  label: string; value: string; onChange: (v: string) => void;
-  required?: boolean; type?: string; locked?: boolean;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+  type?: string;
+  locked?: boolean;
 }) {
   return (
     <label className="block">
       <span className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-        <span>{label}{required && " *"}</span>
+        <span>
+          {label}
+          {required && " *"}
+        </span>
         {locked && (
           <span className="flex items-center gap-1 text-primary normal-case tracking-normal font-normal">
             <ShieldCheck size={11} /> From profile
@@ -697,74 +746,45 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
   );
 }
 
-function CheckInScanModal({
-  onSuccess,
-  onClose,
-}: {
-  onSuccess: () => void;
-  onClose: () => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const animRef = useRef<number | null>(null);
+function CheckInScanModal({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
   const [error, setError] = useState("");
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const readerId = useRef(`checkin-reader-${Math.random().toString(36).slice(2)}`).current;
 
   function stopCamera() {
-    if (animRef.current) cancelAnimationFrame(animRef.current);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  }
-
-  function scanLoop() {
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) {
-      animRef.current = requestAnimationFrame(scanLoop);
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(video, 0, 0);
-    // @ts-ignore
-    if ("BarcodeDetector" in window) {
-      // @ts-ignore
-      new window.BarcodeDetector({ formats: ["qr_code"] })
-        .detect(canvas)
-        .then((codes: any[]) => {
-          if (codes.length > 0) {
-            const value = codes[0].rawValue;
-            stopCamera();
-            if (value === "LFR-CHECKIN") {
-              onSuccess();
-            } else {
-              toast.error("Wrong QR code. Ask the organiser for the check-in code.");
-              onClose();
-            }
-          } else {
-            animRef.current = requestAnimationFrame(scanLoop);
-          }
-        })
-        .catch(() => { animRef.current = requestAnimationFrame(scanLoop); });
-    } else {
-      setError("QR scanning isn't supported on this browser. Ask the organiser to check you in manually.");
-      stopCamera();
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) {
+      scanner
+        .stop()
+        .then(() => scanner.clear())
+        .catch(() => {});
     }
   }
 
   useEffect(() => {
     async function start() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          scanLoop();
-        }
-      } catch {
+        const scanner = new Html5Qrcode(readerId);
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 220 },
+          (decodedText) => {
+            stopCamera();
+            if (decodedText === "LFR-CHECKIN") {
+              onSuccess();
+            } else {
+              toast.error("Wrong QR code. Ask the organiser for the check-in code.");
+              onClose();
+            }
+          },
+          () => {
+            // per-frame miss — expected, ignore
+          },
+        );
+      } catch (err) {
+        console.error(err);
         setError("Camera access denied. Please allow camera access and try again.");
       }
     }
@@ -782,7 +802,10 @@ function CheckInScanModal({
         onClick={(ev) => ev.stopPropagation()}
       >
         <button
-          onClick={() => { stopCamera(); onClose(); }}
+          onClick={() => {
+            stopCamera();
+            onClose();
+          }}
           className="absolute right-4 top-4 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
         >
           <X size={18} />
@@ -796,12 +819,10 @@ function CheckInScanModal({
         {error ? (
           <p className="text-xs text-destructive text-center">{error}</p>
         ) : (
-          <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-black">
-            <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-48 h-48 border-2 border-primary rounded-xl" />
-            </div>
-          </div>
+          <div
+            id={readerId}
+            className="relative w-full aspect-square rounded-2xl overflow-hidden bg-black [&_video]:!w-full [&_video]:!h-full [&_video]:object-cover"
+          />
         )}
       </div>
     </div>

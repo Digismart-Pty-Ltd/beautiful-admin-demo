@@ -6,9 +6,7 @@ export async function getCurrentUserProfile() {
 
   if (!user) return null;
 
-  const snapshot = await getDoc(
-    doc(db, "users", user.uid)
-  );
+  const snapshot = await getDoc(doc(db, "users", user.uid));
 
   if (!snapshot.exists()) return null;
 

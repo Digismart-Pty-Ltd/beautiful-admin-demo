@@ -4,11 +4,7 @@ import { toast } from "sonner";
 import { Check, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
-import {
-  registerMember,
-  registerOpenRunner,
-  upgradeToMember,
-} from "@/services/authService";
+import { registerMember, upgradeToMember } from "@/services/authService";
 
 // Replace the waiverPoints array at the top of the file
 const waiverPoints = [
@@ -44,10 +40,7 @@ const waiverPoints = [
     "Legal Understanding",
     "I confirm that I have read and understood this waiver, agree to its terms voluntarily, and that this agreement is binding on me, my dependents, and my estate.",
   ],
-  [
-    "Governing Law",
-    "This agreement is governed by the laws of the Republic of South Africa.",
-  ],
+  ["Governing Law", "This agreement is governed by the laws of the Republic of South Africa."],
 ] as const;
 
 export default function Join() {
@@ -56,7 +49,7 @@ export default function Join() {
 
   const isOpenRunner = user && !isMember;
 
-  const [tab, setTab] = useState<"member" | "open">("member");
+  const [tab, setTab] = useState<"member">("member");
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -69,9 +62,7 @@ export default function Join() {
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyNumber, setEmergencyNumber] = useState("");
 
-  const [checks, setChecks] = useState<boolean[]>(
-    Array(waiverPoints.length).fill(false)
-  );
+  const [checks, setChecks] = useState<boolean[]>(Array(waiverPoints.length).fill(false));
   const [submitting, setSubmitting] = useState(false);
 
   const allChecked = checks.every(Boolean);
@@ -131,18 +122,9 @@ export default function Join() {
           });
         }
 
-        toast.success(
-          `Welcome, ${name.split(" ")[0]}! Your membership account has been created.`
-        );
+        toast.success(`Welcome, ${name.split(" ")[0]}! Your membership account has been created.`);
         nav("/membership");
       } else {
-  if (!allChecked) {
-    setSubmitting(false);
-    return toast.error("Please accept the full waiver to register.");
-  }
-  await registerOpenRunner({ name, email, password });
-        toast.success("Registered as Open Runner.");
-        nav("/events");
       }
     } catch (error: any) {
       console.error(error);
@@ -166,20 +148,15 @@ export default function Join() {
 
   return (
     <div className="min-h-screen bg-background">
-
       <section className="mx-auto max-w-3xl px-5 pt-14 pb-6">
-        <div className="text-xs uppercase tracking-[0.3em] text-primary">
-          Get on the start line
-        </div>
+        <div className="text-xs uppercase tracking-[0.3em] text-primary">Get on the start line</div>
 
         <h1 className="mt-3 display text-3xl">Join.</h1>
 
         {isOpenRunner ? (
           <p className="mt-4 text-muted-foreground">
             You&apos;re signed in as an Open Runner.{" "}
-            <span className="text-foreground font-medium">
-              Upgrade to a Club Member below.
-            </span>
+            <span className="text-foreground font-medium">Upgrade to a Club Member below.</span>
           </p>
         ) : (
           <p className="mt-4 text-muted-foreground">
@@ -193,36 +170,6 @@ export default function Join() {
       </section>
 
       <section className="mx-auto max-w-3xl px-5">
-        {!isOpenRunner && (
-          <div className="relative grid grid-cols-2 gap-0 rounded-full border border-border bg-card p-1">
-            <span
-              className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-primary transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-              style={{ left: indicatorStyle.left, width: indicatorStyle.width }}
-            />
-
-            {(
-              [
-                ["member", "Club Member"],
-                ["open", "Open Runner"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                ref={(el) => { tabRefs.current[value] = el; }}
-                type="button"
-                onClick={() => setTab(value)}
-                className={`relative z-10 rounded-full px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] transition-colors duration-200 ${
-                  tab === value
-                    ? "text-primary-foreground"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-
         <form
           onSubmit={submit}
           className="mt-6 rounded-3xl border border-border bg-card p-6 space-y-4"
@@ -255,12 +202,21 @@ export default function Join() {
               />
             )}
 
-            {(tab === "member" || isOpenRunner) && (
+            {(true || isOpenRunner) && (
               <>
                 <Field label="ID / Passport" value={id} onChange={setId} />
                 <Field label="Contact number" value={contact} onChange={setContact} />
-                <Field label="Emergency contact name" value={emergencyName} onChange={setEmergencyName} />
-                <Field label="Emergency contact number" type="tel" value={emergencyNumber} onChange={setEmergencyNumber} />
+                <Field
+                  label="Emergency contact name"
+                  value={emergencyName}
+                  onChange={setEmergencyName}
+                />
+                <Field
+                  label="Emergency contact number"
+                  type="tel"
+                  value={emergencyNumber}
+                  onChange={setEmergencyNumber}
+                />
               </>
             )}
           </div>
@@ -272,16 +228,15 @@ export default function Join() {
                 Indemnity & Liability Waiver
               </div>
 
-  <label className="flex items-center gap-2 text-xs cursor-pointer">
-  <input
-    type="checkbox"
-    checked={allChecked}
-    onChange={(e) => setAll(e.target.checked)}
-    className="accent-primary"
-  />
-  Accept all
-</label>
-             
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={(e) => setAll(e.target.checked)}
+                  className="accent-primary"
+                />
+                Accept all
+              </label>
             </div>
 
             <p className="mt-2 text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -289,26 +244,26 @@ export default function Join() {
             </p>
 
             <ul className="mt-4 space-y-2">
-{waiverPoints.map(([title, body], i) => (
-  <li key={title}>
-    <label className="flex items-start gap-2 text-xs cursor-pointer">
-      <input
-        type="checkbox"
-        checked={checks[i]}
-        onChange={(e) =>
-          setChecks((current) =>
-            current.map((value, idx) => (idx === i ? e.target.checked : value))
-          )
-        }
-        className="accent-primary mt-0.5"
-      />
-      <span>
-        <strong className="text-foreground">{title}.</strong>{" "}
-        <span className="text-muted-foreground">{body}</span>
-      </span>
-    </label>
-  </li>
-))}
+              {waiverPoints.map(([title, body], i) => (
+                <li key={title}>
+                  <label className="flex items-start gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checks[i]}
+                      onChange={(e) =>
+                        setChecks((current) =>
+                          current.map((value, idx) => (idx === i ? e.target.checked : value)),
+                        )
+                      }
+                      className="accent-primary mt-0.5"
+                    />
+                    <span>
+                      <strong className="text-foreground">{title}.</strong>{" "}
+                      <span className="text-muted-foreground">{body}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -321,20 +276,17 @@ export default function Join() {
             {submitting
               ? "Please wait…"
               : isOpenRunner
-              ? "Upgrade to Club Member"
-              : tab === "member"
-              ? "Become a Member"
-              : "Register as Open Runner"}
+                ? "Upgrade to Club Member"
+                : "Become a Member"}
           </button>
 
-          {!allChecked && (tab === "member" || isOpenRunner) && (
+          {!allChecked && (
             <p className="text-center text-[11px] text-muted-foreground">
               Tick every box to confirm you accept the full waiver.
             </p>
           )}
         </form>
       </section>
-
     </div>
   );
 }

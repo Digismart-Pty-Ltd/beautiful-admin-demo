@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import lfr from "@/assets/lfr-logo-clean.png";
 import community from "@/assets/community.jpg";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ShoppingBag, X, Check, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import tshirt1 from "@/assets/Tshirt-1.jpeg";
@@ -9,24 +9,42 @@ import tshirt2 from "@/assets/Tshirt-2.jpeg";
 import socks from "@/assets/socks.jpeg";
 import vestBlack from "@/assets/vest-black.jpeg";
 import vestWhite from "@/assets/vest-white.jpeg";
-import emailjs from "@emailjs/browser";
+import { db } from "@/lib/firebase";
+import { BANK_DETAILS, ADMIN_EMAIL } from "@/lib/demo-data";
+import {
+  collection,
+  addDoc,
+  doc,
+  getDocs,
+  query,
+  where,
+  writeBatch,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
+import { subscribeToSponsors, type Sponsor } from "@/lib/sponsorService";
 
-// ─── EmailJS config ───────────────────────────────────────────────────────────
+// ─── Firebase / notification config ────────────────────────────────────────────
+// Requires the "Trigger Email from Firestore" extension installed, watching the
+// "mail" collection below. Also requires Firestore security rules that allow
+// client writes to "orders" and "mail" (typically scoped/validated via rules).
 
-const EJS_SERVICE_ID  = "service_qwvwk9r";   // ← replace
-const EJS_TEMPLATE_ID = "template_nueotz9";  // ← replace
-const EJS_PUBLIC_KEY  = "Qmkoq-9evP8IE7AB_";   // ← replace
-const EJS_BATCH_TEMPLATE_ID = "template_syjb3dg"; // ← paste your new template ID here
+const BATCH_SIZE = 10;
 
+// ─── Order number generator ─────────────────────────────────────────────────
+function generateOrderNumber() {
+  const rand = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `LFR-${rand}`;
+}
 // ─── product catalogue ────────────────────────────────────────────────────────
 
 const TSHIRT_SIZES = ["S", "M", "L", "XL"] as const;
 const SOCK_SIZES = [
   { label: "Kids (5–8 yrs)", desc: "Crew only" },
-  { label: "Small",          desc: "UK 12–3 / EU 32–38" },
-  { label: "Medium",         desc: "UK 4–7 / EU 38–42" },
-  { label: "Large",          desc: "UK 8–12 / EU 42–47" },
-  { label: "XL",             desc: "UK 13+ / EU 47+" },
+  { label: "Small", desc: "UK 12–3 / EU 32–38" },
+  { label: "Medium", desc: "UK 4–7 / EU 38–42" },
+  { label: "Large", desc: "UK 8–12 / EU 42–47" },
+  { label: "XL", desc: "UK 13+ / EU 47+" },
 ] as const;
 
 type Product = {
@@ -98,6 +116,18 @@ type FormState = {
   notes: string;
 };
 
+type StoredOrder = {
+  id: string;
+  orderNumber: string;
+  createdAt?: Timestamp;
+  name: string;
+  email: string;
+  phone: string;
+  lines: OrderLine[];
+  notes: string;
+  batched: boolean;
+};
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function sizesFor(type: "tshirt" | "socks") {
@@ -108,12 +138,13 @@ function sizesFor(type: "tshirt" | "socks") {
 // ─── page ─────────────────────────────────────────────────────────────────────
 
 export default function RunningClub() {
-  useEffect(() => { document.title = "Little Falls Runners — Waven Harper Fitness"; }, []);
+  useEffect(() => {
+    document.title = "Little Falls Runners — Waven Harper Fitness";
+  }, []);
   const [orderOpen, setOrderOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
-
       {/* ── Hero ── */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0">
@@ -126,17 +157,43 @@ export default function RunningClub() {
           </div>
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-primary">Community Club</div>
-            <h1 className="mt-3 display text-4xl md:text-8xl leading-[0.9]">Little Falls<br />Runners.</h1>
+            <h1 className="mt-3 display text-4xl md:text-8xl leading-[0.9]">
+              Little Falls
+              <br />
+              Runners.
+            </h1>
             <p className="marker mt-4 text-primary text-3xl md:text-5xl">No one is chasing us.</p>
           </div>
+        </div>
+      </section>
+
+            {/* ── Join CTA ── */}
+      <section className="mx-auto max-w-4xl px-5 mt-6 pb-16 text-center">
+        <h2 className="display text-3xl">Join the club.</h2>
+        <p className="mt-2 text-muted-foreground">
+         Membership is currently free. Join us, meet the community, and enjoy every run.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3 justify-center">
+          <Link
+            to="/join"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow"
+          >
+            Join the club
+          </Link>
+          <Link
+            to="/events"
+            className="inline-flex items-center gap-2 rounded-full border border-border px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] hover:border-primary"
+          >
+            See events
+          </Link>
         </div>
       </section>
 
       {/* ── About ── */}
       <section className="mx-auto max-w-5xl px-5 md:px-8 mt-10">
         <p className="text-lg md:text-2xl text-muted-foreground leading-relaxed">
-          We meet at sunrise, after work, on Saturdays — basically whenever someone's keen.
-          LFR is a no-pressure, all-paces community of runners and walkers based in Little Falls, Roodepoort.
+          We meet at sunrise, after work, on Saturdays — basically whenever someone's keen. LFR is a
+          no-pressure, all-paces community of runners and walkers based in Little Falls, Roodepoort.
           You don't need to be fast. You just need to show up.
         </p>
       </section>
@@ -145,12 +202,14 @@ export default function RunningClub() {
       <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-16 grid gap-4 md:grid-cols-3">
         {[
           { k: "150+", v: "Active members" },
-          { k: "4×",   v: "Group runs / week" },
-          { k: "0",    v: "People chasing us" },
+          { k: "4×", v: "Group runs / week" },
+          { k: "0", v: "People chasing us" },
         ].map((s) => (
           <div key={s.v} className="rounded-2xl border border-border bg-card p-8 text-center">
             <div className="display text-4xl md:text-6xl text-primary">{s.k}</div>
-            <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">{s.v}</div>
+            <div className="mt-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              {s.v}
+            </div>
           </div>
         ))}
       </section>
@@ -171,32 +230,56 @@ export default function RunningClub() {
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
-          <MerchCard label="White / Pink" tag="Tee — Unisex cut" price="R230" sizes="S · M · L · XL" imgSrc={tshirt1} imgAlt="White LFR tee" />
-          <MerchCard label="Black / White" tag="Tee — Unisex cut" price="R230" sizes="S · M · L · XL" imgSrc={tshirt2} imgAlt="Black LFR tee" />
-          <MerchCard label="Black Vest" tag="Vest — Unisex cut" price="R210" sizes="S · M · L · XL" imgSrc={vestBlack} imgAlt="Black LFR vest" />
-          <MerchCard label="White Vest" tag="Vest — Unisex cut" price="R210" sizes="S · M · L · XL" imgSrc={vestWhite} imgAlt="White LFR vest" />
-          <MerchCard label="Pink & White" tag="LFR Socks" price="R150" sizes="Kids · S · M · L · XL" imgSrc={socks} imgAlt="LFR socks" />
+          <MerchCard
+            label="White / Pink"
+            tag="Tee — Unisex cut"
+            price="R230"
+            sizes="S · M · L · XL"
+            imgSrc={tshirt1}
+            imgAlt="White LFR tee"
+          />
+          <MerchCard
+            label="Black / White"
+            tag="Tee — Unisex cut"
+            price="R230"
+            sizes="S · M · L · XL"
+            imgSrc={tshirt2}
+            imgAlt="Black LFR tee"
+          />
+          <MerchCard
+            label="Black Vest"
+            tag="Vest — Unisex cut"
+            price="R210"
+            sizes="S · M · L · XL"
+            imgSrc={vestBlack}
+            imgAlt="Black LFR vest"
+          />
+          <MerchCard
+            label="White Vest"
+            tag="Vest — Unisex cut"
+            price="R210"
+            sizes="S · M · L · XL"
+            imgSrc={vestWhite}
+            imgAlt="White LFR vest"
+          />
+          <MerchCard
+            label="Pink & White"
+            tag="LFR Socks"
+            price="R150"
+            sizes="Kids · S · M · L · XL"
+            imgSrc={socks}
+            imgAlt="LFR socks"
+          />
         </div>
 
         <p className="mt-5 text-xs text-muted-foreground">
-          * All orders processed manually — we'll confirm stock and payment details via WhatsApp or email.
+          * All orders processed manually — we'll confirm stock and payment details via WhatsApp or
+          email.
         </p>
       </section>
 
-      {/* ── Join CTA ── */}
-      <section className="mx-auto max-w-4xl px-5 mt-24 pb-16 text-center">
-        <h2 className="display text-3xl">Join the club.</h2>
-        <p className="mt-4 text-muted-foreground">Membership is free for the first month. After that — only if you've actually been showing up.</p>
-        <div className="mt-8 flex flex-wrap gap-3 justify-center">
-          <Link to="/join" className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow">
-            Join the club
-          </Link>
-          <Link to="/events" className="inline-flex items-center gap-2 rounded-full border border-border px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] hover:border-primary">
-            See events
-          </Link>
-        </div>
-      </section>
-
+      {/* ── Sponsors ── */}
+      <SponsorsBanner />
 
       {/* ── Order Modal ── */}
       {orderOpen && <OrderModal onClose={() => setOrderOpen(false)} />}
@@ -204,21 +287,100 @@ export default function RunningClub() {
   );
 }
 
+// ─── sponsors banner ────────────────────────────────────────────────────────
+
+function SponsorsBanner() {
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToSponsors(setSponsors);
+    return () => unsub();
+  }, []);
+
+  if (sponsors.length === 0) return null;
+
+  // Duplicate the list so the marquee loops seamlessly
+  const loopedSponsors = [...sponsors, ...sponsors];
+
+  return (
+    <section className="mt-24 mb-16">
+      <div className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 text-center mb-8">
+        <div className="text-xs uppercase tracking-[0.3em] text-primary">Proudly supported by</div>
+        <h2 className="mt-2 display text-3xl md:text-5xl">Our sponsors.</h2>
+      </div>
+
+      <div className="relative overflow-hidden py-6 border-y border-border bg-card">
+        {/* Fade edges */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-16 md:w-32 bg-gradient-to-r from-card to-transparent z-10" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-16 md:w-32 bg-gradient-to-l from-card to-transparent z-10" />
+
+        <div className="flex w-max animate-marquee gap-10 md:gap-16">
+          {loopedSponsors.map((s, i) => (
+            <a
+            key={`${s.id}-${i}`}
+              href={s.websiteUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="shrink-0 flex items-center justify-center h-20 w-40 md:h-24 md:w-48 transition duration-300 hover:scale-110"
+              title={s.name}
+            >
+              <img
+                src={s.logoUrl}
+                alt={s.name}
+                className="max-h-full max-w-full w-auto h-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+              />
+            </a>
+          ))}
+        </div>
+
+        <style>{`
+          @keyframes marquee-scroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+          }
+          .animate-marquee {
+            animation: marquee-scroll 30s linear infinite;
+          }
+          .animate-marquee:hover {
+            animation-play-state: paused;
+          }
+        `}</style>
+      </div>
+    </section>
+  );
+}
 // ─── merch card ───────────────────────────────────────────────────────────────
 
 function MerchCard({
-  label, tag, price, sizes, imgSrc, imgAlt,
-  isPlaceholder, placeholderColour, placeholderText, lightText,
+  label,
+  tag,
+  price,
+  sizes,
+  imgSrc,
+  imgAlt,
+  isPlaceholder,
+  placeholderColour,
+  placeholderText,
+  lightText,
 }: {
-  label: string; tag: string; price: string; sizes: string;
-  imgSrc?: string; imgAlt: string;
-  isPlaceholder?: boolean; placeholderColour?: string; placeholderText?: string; lightText?: boolean;
+  label: string;
+  tag: string;
+  price: string;
+  sizes: string;
+  imgSrc?: string;
+  imgAlt: string;
+  isPlaceholder?: boolean;
+  placeholderColour?: string;
+  placeholderText?: string;
+  lightText?: boolean;
 }) {
   return (
     <div className="group rounded-3xl border border-border bg-card overflow-hidden">
       <div
         className="aspect-[3/4] overflow-hidden flex items-center justify-center"
-        style={isPlaceholder ? { backgroundColor: placeholderColour } : { backgroundColor: "#ffffff" }}
+        style={
+          isPlaceholder ? { backgroundColor: placeholderColour } : { backgroundColor: "#ffffff" }
+        }
       >
         {isPlaceholder ? (
           <span
@@ -228,7 +390,11 @@ function MerchCard({
             {placeholderText}
           </span>
         ) : (
-          <img src={imgSrc} alt={imgAlt} className="h-full w-full object-contain transition duration-700 group-hover:scale-105" />
+          <img
+            src={imgSrc}
+            alt={imgAlt}
+            className="h-full w-full object-contain transition duration-700 group-hover:scale-105"
+          />
         )}
       </div>
       <div className="p-5">
@@ -243,6 +409,7 @@ function MerchCard({
   );
 }
 
+
 // ─── order modal ──────────────────────────────────────────────────────────────
 
 function OrderModal({ onClose }: { onClose: () => void }) {
@@ -254,12 +421,16 @@ function OrderModal({ onClose }: { onClose: () => void }) {
   });
 
   const [form, setForm] = useState<FormState>({
-    name: "", email: "", phone: "", notes: "",
+    name: "",
+    email: "",
+    phone: "",
+    notes: "",
     lines: [blank()],
   });
-  const [submitted, setSubmitted]   = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sockGuideOpen, setSockGuideOpen] = useState(false);
+  const [orderNumber, setOrderNumber] = useState("");
 
   function updateLine(i: number, patch: Partial<OrderLine>) {
     const lines = form.lines.map((l, idx) => {
@@ -268,83 +439,96 @@ function OrderModal({ onClose }: { onClose: () => void }) {
       if (patch.product) {
         const prod = PRODUCTS.find((p) => p.id === patch.product)!;
         updated.colour = prod.colours[0];
-        updated.size   = sizesFor(prod.type)[0];
+        updated.size = sizesFor(prod.type)[0];
       }
       return updated;
     });
     setForm({ ...form, lines });
   }
 
-  function addLine()        { setForm({ ...form, lines: [...form.lines, blank()] }); }
-  function removeLine(i: number) { setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) }); }
+  function addLine() {
+    setForm({ ...form, lines: [...form.lines, blank()] });
+  }
+  function removeLine(i: number) {
+    setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
+  }
 
-async function handleSubmit(e: React.FormEvent) {
-  e.preventDefault();
-  setSubmitting(true);
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
 
-  const orderItems = form.lines
-    .map((l) => `${l.qty}x ${l.product} — ${l.colour}, ${l.size}`)
-    .join("\n");
+    const newOrderNumber = generateOrderNumber(); // ← add
 
-  try {
-    // 1. Send individual order email (existing behaviour)
-    await emailjs.send(
-      EJS_SERVICE_ID,
-      EJS_TEMPLATE_ID,
-      {
-        customer_name:  form.name,
-        customer_email: form.email,
-        customer_phone: form.phone,
-        order_items:    orderItems,
-        notes:          form.notes || "—",
-      },
-      EJS_PUBLIC_KEY,
-    );
+    const orderItems = form.lines
+      .map((l) => `${l.qty}x ${l.product} — ${l.colour}, ${l.size}`)
+      .join("\n");
 
-    // 2. Save order to localStorage and check batch threshold
-    const { loadOrders, saveOrders, markBatched, BATCH_SIZE } = await import("@/lib/orders");
-    const newOrder = {
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      name: form.name,
-      email: form.email,
-      phone: form.phone,
-      lines: form.lines,
-      notes: form.notes,
-      batched: false,
-    };
-    const updated = [...loadOrders(), newOrder];
-    saveOrders(updated);
+    try {
+      await addDoc(collection(db, "orders"), {
+        orderNumber: newOrderNumber, // ← add
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        lines: form.lines,
+        notes: form.notes,
+        batched: false,
+        createdAt: serverTimestamp(),
+      });
 
-    const unbatched = updated.filter((o) => !o.batched);
-    if (unbatched.length >= BATCH_SIZE) {
-      const orderDetails = unbatched.map((o, i) =>
-        `ORDER ${i + 1} — ${o.createdAt.slice(0, 10)}\nName: ${o.name}\nEmail: ${o.email}\nPhone: ${o.phone}\nItems: ${o.lines.map((l) => `${l.qty}x ${l.product} (${l.colour}, ${l.size})`).join(", ")}\nNotes: ${o.notes || "—"}`
-      ).join("\n\n---\n\n");
-
-      // 3. Auto-send batch summary email via EmailJS
-      await emailjs.send(
-        EJS_SERVICE_ID,
-        EJS_BATCH_TEMPLATE_ID,
-        {
-          batch_count:   unbatched.length,
-          order_details: orderDetails,
+      await addDoc(collection(db, "mail"), {
+        to: [ADMIN_EMAIL],
+        message: {
+          subject: `New LFR order ${newOrderNumber} from ${form.name}`, // ← updated
+          text: `Order #: ${newOrderNumber}\nName: ${form.name}\nEmail: ${form.email}\nPhone: ${form.phone}\n\nItems:\n${orderItems}\n\nNotes: ${form.notes || "—"}`, // ← updated
         },
-        EJS_PUBLIC_KEY,
+      });
+
+      const unbatchedSnap = await getDocs(
+        query(collection(db, "orders"), where("batched", "==", false)),
       );
 
-      markBatched(unbatched.map((o) => o.id));
-      toast.info("Batch of 10 orders sent to admin automatically.");
-    }
+      if (unbatchedSnap.size >= BATCH_SIZE) {
+        const unbatchedOrders: StoredOrder[] = unbatchedSnap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<StoredOrder, "id">),
+        }));
 
-    setSubmitted(true);
-  } catch (err) {
-    toast.error("Something went wrong — please try WhatsApp instead.");
-    console.error(err);
-  } finally {
-    setSubmitting(false);
+        const orderDetails = unbatchedOrders
+          .map((o, i) => {
+            const dateStr = o.createdAt ? o.createdAt.toDate().toISOString().slice(0, 10) : "—";
+            const itemsStr = o.lines
+              .map((l) => `${l.qty}x ${l.product} (${l.colour}, ${l.size})`)
+              .join(", ");
+            return `ORDER ${i + 1} — ${o.orderNumber ?? "—"} — ${dateStr}\nName: ${o.name}\nEmail: ${o.email}\nPhone: ${o.phone}\nItems: ${itemsStr}\nNotes: ${o.notes || "—"}`; // ← updated
+          })
+          .join("\n\n---\n\n");
+
+        await addDoc(collection(db, "mail"), {
+          to: [ADMIN_EMAIL],
+          message: {
+            subject: `LFR order batch summary (${unbatchedOrders.length} orders)`,
+            text: orderDetails,
+          },
+        });
+
+        const batch = writeBatch(db);
+        unbatchedOrders.forEach((o) => {
+          batch.update(doc(db, "orders", o.id), { batched: true });
+        });
+        await batch.commit();
+
+        toast.info(`Batch of ${unbatchedOrders.length} orders sent to admin automatically.`);
+      }
+
+      setOrderNumber(newOrderNumber); // ← add
+      setSubmitted(true);
+    } catch (err) {
+      toast.error("Something went wrong — please try WhatsApp instead.");
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
   }
-}
 
   return (
     <div
@@ -355,19 +539,64 @@ async function handleSubmit(e: React.FormEvent) {
         className="relative w-full max-w-xl rounded-3xl border border-border bg-card p-6 md:p-8 my-8"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground">
+        <button
+          onClick={onClose}
+          className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"
+        >
           <X size={18} />
         </button>
 
         {submitted ? (
-          <div className="py-12 text-center">
+          <div className="py-10 text-center">
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-primary">
               <Check size={28} />
             </div>
             <div className="display text-3xl">Order received!</div>
-            <p className="mt-3 text-sm text-muted-foreground max-w-xs mx-auto">
-              We'll confirm your order, stock, and payment details via WhatsApp or email within 24 hours.
+
+            <div className="mt-5 inline-block rounded-2xl border border-primary/30 bg-primary/5 px-6 py-3">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Your order reference
+              </div>
+              <div className="display text-2xl text-primary mt-1">{orderNumber}</div>
+            </div>
+
+            <p className="mt-5 text-sm text-muted-foreground max-w-sm mx-auto">
+              Please pay using the details below and use your order reference as the payment
+              reference so we can match your payment. Once you've paid, please send proof of
+              payment to {ADMIN_EMAIL} so we can confirm and process your order.
             </p>
+
+            <div className="mt-5 rounded-2xl border border-border bg-background/40 p-5 text-left max-w-sm mx-auto space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Account name</span>
+                <span className="font-medium text-foreground">{BANK_DETAILS.accountName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Bank</span>
+                <span className="font-medium text-foreground">{BANK_DETAILS.bank}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Account number</span>
+                <span className="font-medium text-foreground">{BANK_DETAILS.accountNumber}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Account type</span>
+                <span className="font-medium text-foreground">{BANK_DETAILS.accountType}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Branch code</span>
+                <span className="font-medium text-foreground">{BANK_DETAILS.branchCode}</span>
+              </div>
+              <div className="flex justify-between text-sm pt-2 border-t border-border">
+                <span className="text-muted-foreground">Reference</span>
+                <span className="font-semibold text-primary">{orderNumber}</span>
+              </div>
+            </div>
+
+            <p className="mt-5 text-sm text-muted-foreground max-w-xs mx-auto">
+              Once we receive your payment, we'll be in touch via WhatsApp or email to confirm.
+            </p>
+
             <button
               onClick={onClose}
               className="mt-8 inline-flex rounded-full border border-border px-7 py-3 text-xs uppercase tracking-[0.2em] hover:border-primary"
@@ -378,28 +607,54 @@ async function handleSubmit(e: React.FormEvent) {
         ) : (
           <>
             <div className="display text-3xl">Place an order</div>
-            <p className="text-sm text-muted-foreground mt-1">Fill in your details and we'll be in touch to confirm.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Fill in your details and we'll be in touch to confirm.
+            </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-5">
               {/* contact */}
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Full name"        value={form.name}  onChange={(v) => setForm({ ...form, name: v })}  required />
-                <Field label="Phone / WhatsApp" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} required />
+                <Field
+                  label="Full name"
+                  value={form.name}
+                  onChange={(v) => setForm({ ...form, name: v })}
+                  required
+                />
+                <Field
+                  label="Phone / WhatsApp"
+                  value={form.phone}
+                  onChange={(v) => setForm({ ...form, phone: v })}
+                  required
+                />
               </div>
-              <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" required />
+              <Field
+                label="Email"
+                value={form.email}
+                onChange={(v) => setForm({ ...form, email: v })}
+                type="email"
+                required
+              />
 
               {/* order lines */}
               <div>
-                <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3">Items</div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3">
+                  Items
+                </div>
                 <div className="space-y-3">
                   {form.lines.map((line, i) => {
                     const prod = PRODUCTS.find((p) => p.id === line.product)!;
                     return (
                       <div key={i} className="rounded-xl border border-border p-4 space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold uppercase tracking-[0.15em]">Item {i + 1}</span>
+                          <span className="text-xs font-semibold uppercase tracking-[0.15em]">
+                            Item {i + 1}
+                          </span>
                           {form.lines.length > 1 && (
-                            <button type="button" onClick={() => removeLine(i)} className="text-muted-foreground hover:text-destructive">
+                            <button
+                              type="button"
+                              onClick={() => removeLine(i)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
                               <X size={14} />
                             </button>
                           )}
@@ -409,7 +664,10 @@ async function handleSubmit(e: React.FormEvent) {
                           label="Product"
                           value={line.product}
                           onChange={(v) => updateLine(i, { product: v })}
-                          options={PRODUCTS.map((p) => ({ value: p.id, label: `${p.name} — ${p.price ? `R${p.price}` : "POA"}` }))}
+                          options={PRODUCTS.map((p) => ({
+                            value: p.id,
+                            label: `${p.name} — ${p.price ? `R${p.price}` : "POA"}`,
+                          }))}
                         />
 
                         <div className="grid gap-3 grid-cols-3">
@@ -426,9 +684,13 @@ async function handleSubmit(e: React.FormEvent) {
                             options={sizesFor(prod.type).map((s) => ({ value: s, label: s }))}
                           />
                           <label className="block">
-                            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Qty</span>
+                            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                              Qty
+                            </span>
                             <input
-                              type="number" min={1} max={20}
+                              type="number"
+                              min={1}
+                              max={20}
                               value={line.qty}
                               onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
                               className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
@@ -440,7 +702,11 @@ async function handleSubmit(e: React.FormEvent) {
                   })}
                 </div>
 
-                <button type="button" onClick={addLine} className="mt-3 text-xs text-primary underline underline-offset-2">
+                <button
+                  type="button"
+                  onClick={addLine}
+                  className="mt-3 text-xs text-primary underline underline-offset-2"
+                >
                   + Add another item
                 </button>
               </div>
@@ -453,7 +719,10 @@ async function handleSubmit(e: React.FormEvent) {
                   className="flex w-full items-center justify-between px-4 py-3 text-xs uppercase tracking-[0.2em] text-muted-foreground"
                 >
                   Sock size guide
-                  <ChevronDown size={14} className={`transition ${sockGuideOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown
+                    size={14}
+                    className={`transition ${sockGuideOpen ? "rotate-180" : ""}`}
+                  />
                 </button>
                 {sockGuideOpen && (
                   <div className="px-4 pb-4">
@@ -479,7 +748,9 @@ async function handleSubmit(e: React.FormEvent) {
 
               {/* notes */}
               <label className="block">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Notes (optional)</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Notes (optional)
+                </span>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -500,7 +771,7 @@ async function handleSubmit(e: React.FormEvent) {
               <p className="text-[11px] text-muted-foreground text-center">
                 Payment details will be shared once we confirm your order via WhatsApp or email.
               </p>
-            </form>
+           </form>
           </>
         )}
       </div>
@@ -511,15 +782,25 @@ async function handleSubmit(e: React.FormEvent) {
 // ─── form helpers ─────────────────────────────────────────────────────────────
 
 function Field({
-  label, value, onChange, required, type = "text",
+  label,
+  value,
+  onChange,
+  required,
+  type = "text",
 }: {
-  label: string; value: string; onChange: (v: string) => void; required?: boolean; type?: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+  type?: string;
 }) {
   return (
     <label className="block">
       <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</span>
       <input
-        type={type} value={value} required={required}
+        type={type}
+        value={value}
+        required={required}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
       />
@@ -528,9 +809,14 @@ function Field({
 }
 
 function SelectField({
-  label, value, onChange, options,
+  label,
+  value,
+  onChange,
+  options,
 }: {
-  label: string; value: string; onChange: (v: string) => void;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
   options: { value: string; label: string }[];
 }) {
   return (
@@ -542,7 +828,9 @@ function SelectField({
         className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary appearance-none"
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
       </select>
     </label>

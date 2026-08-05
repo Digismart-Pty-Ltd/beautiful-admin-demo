@@ -26,16 +26,29 @@ export function SiteFooter() {
             © {new Date().getFullYear()} Waven Harper Fitness. All rights reserved.
           </div>
           <div className="flex items-center gap-4 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            <Link to="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
-            {!loggedIn && <>
-              <span className="opacity-30">·</span>
-              <Link to="/admin" className="hover:text-foreground transition">Staff</Link>
-            </>}
-             <span className="opacity-30">·</span>
-                        <Link to="/support" className="hover:text-foreground transition">Support</Link>
+            <Link to="/privacy" className="hover:text-foreground transition">
+              Privacy Policy
+            </Link>
+            {!loggedIn && (
+              <>
+                <span className="opacity-30">·</span>
+                <Link to="/admin" className="hover:text-foreground transition">
+                  Staff
+                </Link>
+              </>
+            )}
+            <span className="opacity-30">·</span>
+            <Link to="/support" className="hover:text-foreground transition">
+              Support
+            </Link>
 
             <span className="opacity-30">·</span>
-            <a href="https://dsmart.co.za" target="_blank" rel="noreferrer" className="hover:text-foreground transition">
+            <a
+              href="https://dsmart.co.za"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-foreground transition"
+            >
               Built by Digismart
             </a>
           </div>
@@ -45,19 +58,33 @@ export function SiteFooter() {
       {/* ── Mobile footer ── */}
       <footer className="md:hidden border-t border-border">
         <div className="mx-auto max-w-6xl px-8 py-6 flex flex-col items-center gap-3">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-center w-full">
             © {new Date().getFullYear()} Waven Harper Fitness. All rights reserved.
           </div>
-<div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-center">            <Link to="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
-            {!loggedIn && <>
-              <span className="opacity-30">·</span>
-              <Link to="/admin" className="hover:text-foreground transition">Staff</Link>
-            </>}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-center">
+            {" "}
+            <Link to="/privacy" className="hover:text-foreground transition">
+              Privacy Policy
+            </Link>
+            {!loggedIn && (
+              <>
+                <span className="opacity-30">·</span>
+                <Link to="/admin" className="hover:text-foreground transition">
+                  Staff
+                </Link>
+              </>
+            )}
             <span className="opacity-30">·</span>
-                        <Link to="/support" className="hover:text-foreground transition">Support</Link>
-
-                        <span className="opacity-30">·</span>
-            <a href="https://dsmart.co.za" target="_blank" rel="noreferrer" className="hover:text-foreground transition">
+            <Link to="/support" className="hover:text-foreground transition">
+              Support
+            </Link>
+            <span className="opacity-30">·</span>
+            <a
+              href="https://dsmart.co.za"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-foreground transition"
+            >
               Built by Digismart
             </a>
           </div>
@@ -72,12 +99,19 @@ export function SiteFooter() {
               const active = t.exact ? pathname === t.to : pathname.startsWith(t.to);
               const Icon = t.icon;
               return (
-                <Link key={t.to} to={t.to}
+                <Link
+                  key={t.to}
+                  to={t.to}
                   className={`relative flex flex-col items-center justify-center gap-1 rounded-xl py-2 transition ${
-                    active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
-                  }`}>
+                    active
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
                   <Icon size={18} strokeWidth={active ? 2.4 : 1.8} />
-                  <span className="text-[10px] uppercase tracking-[0.18em] font-semibold">{t.label}</span>
+                  <span className="text-[10px] uppercase tracking-[0.18em] font-semibold">
+                    {t.label}
+                  </span>
                   {active && <span className="absolute -top-1 h-1 w-6 rounded-full bg-primary" />}
                 </Link>
               );

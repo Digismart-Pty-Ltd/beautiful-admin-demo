@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "waven-harper-fitness"
-  }
+    "default": "wavenharperfitness-app"
+  },
+  "targets": {},
+  "etags": {}
 }

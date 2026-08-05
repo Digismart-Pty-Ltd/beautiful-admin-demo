@@ -27,7 +27,14 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && user) {
-      nav(isMember ? "/membership" : "/events", { replace: true });
+      const pushGranted =
+        typeof Notification !== "undefined" && Notification.permission === "granted";
+
+      if (!pushGranted) {
+        nav("/notifications", { replace: true });
+      } else {
+        nav(isMember ? "/membership" : "/events", { replace: true });
+      }
     }
   }, [user, isMember, loading]);
 
@@ -97,12 +104,15 @@ export default function Login() {
             <div className="text-center space-y-2">
               <p className="text-sm text-foreground font-medium">Reset link sent</p>
               <p className="text-sm text-muted-foreground">
-                If <span className="text-foreground">{resetEmail}</span> is registered,
-                you'll receive a password reset link shortly. Check your spam folder if it doesn't arrive.
+                If <span className="text-foreground">{resetEmail}</span> is registered, you'll
+                receive a password reset link shortly. Check your spam folder if it doesn't arrive.
               </p>
             </div>
             <button
-              onClick={() => { setView("login"); setResetEmail(""); }}
+              onClick={() => {
+                setView("login");
+                setResetEmail("");
+              }}
               className="w-full rounded-full bg-primary px-5 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow inline-flex items-center justify-center gap-2"
             >
               <LogIn size={14} /> Back to log in
@@ -153,10 +163,15 @@ export default function Login() {
               disabled={sendingReset}
               className="w-full rounded-full bg-primary px-5 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow inline-flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              {sendingReset
-                ? <><Loader2 size={14} className="animate-spin" /> Sending…</>
-                : <><Mail size={14} /> Send reset link</>
-              }
+              {sendingReset ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Sending…
+                </>
+              ) : (
+                <>
+                  <Mail size={14} /> Send reset link
+                </>
+              )}
             </button>
           </form>
         </section>
@@ -228,7 +243,10 @@ export default function Login() {
           <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => { setResetEmail(email); setView("reset"); }}
+              onClick={() => {
+                setResetEmail(email);
+                setView("reset");
+              }}
               className="text-[11px] text-muted-foreground hover:text-primary transition underline underline-offset-2"
             >
               Forgot password?
@@ -240,10 +258,15 @@ export default function Login() {
             disabled={submitting}
             className="w-full rounded-full bg-primary px-5 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow inline-flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            {submitting
-              ? <><Loader2 size={14} className="animate-spin" /> Logging in…</>
-              : <><LogIn size={14} /> Log In</>
-            }
+            {submitting ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Logging in…
+              </>
+            ) : (
+              <>
+                <LogIn size={14} /> Log In
+              </>
+            )}
           </button>
         </form>
       </section>

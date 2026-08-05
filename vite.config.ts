@@ -11,7 +11,14 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
+      injectManifest: {
+        swSrc: "src/sw.ts",
+        swDest: "dist/sw.js",
+      },
       includeAssets: ["wh-logo.jpeg"],
       manifest: {
         name: "Waven Harper Fitness",

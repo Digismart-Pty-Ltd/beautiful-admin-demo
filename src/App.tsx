@@ -28,7 +28,9 @@ function AuthStoreSync() {
   const { syncAuthUser } = useStore();
 
   const syncRef = useRef(syncAuthUser);
-  useEffect(() => { syncRef.current = syncAuthUser; });
+  useEffect(() => {
+    syncRef.current = syncAuthUser;
+  });
 
   useEffect(() => {
     if (loading) return;
@@ -72,6 +74,17 @@ function NotFound() {
 }
 
 export default function App() {
+  // iOS PWA bug: env(safe-area-inset-top) can miscalculate on first paint
+  // in standalone mode, showing an oversized gap until the page is scrolled.
+  // Forcing a tiny scroll on mount triggers the same reflow that fixes it.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      window.scrollTo(0, 1);
+      window.scrollTo(0, 0);
+    }, 60);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

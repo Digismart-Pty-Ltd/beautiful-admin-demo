@@ -16,11 +16,7 @@ export async function registerMember(data: {
   contact: string;
   emergency: string;
 }) {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    data.email,
-    data.password
-  );
+  const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
   await updateProfile(cred.user, { displayName: data.name });
   await setDoc(doc(db, "users", cred.user.uid), {
     name: data.name,
@@ -39,16 +35,8 @@ export async function registerMember(data: {
   return cred.user;
 }
 
-export async function registerOpenRunner(data: {
-  name: string;
-  email: string;
-  password: string;
-}) {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    data.email,
-    data.password
-  );
+export async function registerOpenRunner(data: { name: string; email: string; password: string }) {
+  const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
   await updateProfile(cred.user, { displayName: data.name });
   await setDoc(doc(db, "users", cred.user.uid), {
     name: data.name,

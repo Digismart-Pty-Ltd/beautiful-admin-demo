@@ -24,6 +24,8 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  addDoc,
+  deleteDoc,
   collection,
   query,
   where,
@@ -31,6 +33,7 @@ import {
 } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { db } from "@/lib/firebase";
+import { Html5Qrcode } from "html5-qrcode";
 
 const tierMeta: Record<Tier, { color: string; need: number }> = {
   Pink: { color: "#e91e8c", need: 0 },
@@ -44,9 +47,17 @@ function isValidPhone(value: string) {
   return /^[+]?[\d\s\-().]{7,15}$/.test(value.trim());
 }
 
+function daysLeftFor(r: { createdAt?: string | Date; expiresInDays: number }): number | null {
+  if (!r.createdAt) return null;
+  const created = new Date(r.createdAt).getTime();
+  const expiry = created + r.expiresInDays * 24 * 60 * 60 * 1000;
+  const msLeft = expiry - Date.now();
+  return Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+}
+
 export default function Membership() {
   const { user, isMember, loading } = useAuth();
-  const { currentMember, state, redeem, myRedemptions } = useStore();
+const { currentMember, state } = useStore();
 
   // ── Firestore profile state ───────────────────────────────────────────────
   const [contact, setContact] = useState("");
@@ -70,10 +81,11 @@ export default function Membership() {
   const [firestoreName, setFirestoreName] = useState<string | null>(null);
 
   // ── Firestore live registrations for this member ──────────────────────────
-  const [liveRegistrations, setLiveRegistrations] = useState<any[]>([]);
+  const [liveRegistrations, setLiveRegistrations] = useState<Array<{ id: string; eventId: string; checkedInAt?: string }>>([]);
   const [liveRaceCount, setLiveRaceCount] = useState<number | null>(null);
   const [scanningReward, setScanningReward] = useState<{ id: string; title: string } | null>(null);
-  const [firestoreRewards, setFirestoreRewards] = useState<any[]>([]);
+  const [firestoreRewards, setFirestoreRewards] = useState<Array<{ id: string; tier: Tier; title: string; description: string; createdAt?: string; expiresInDays: number }>>([]);
+  const [redemptions, setRedemptions] = useState<Array<{ id: string; rewardId: string; redeemedAt: string }>>([]);
 
   useEffect(() => {
     document.title = "Membership & Rewards — Waven Harper Fitness";
@@ -86,7 +98,13 @@ export default function Membership() {
     if (!uid || !isMember) return;
     const unsub = onSnapshot(doc(db, "users", uid), (snap) => {
       if (!snap.exists()) return;
-      const data = snap.data() as any;
+      const data = snap.data() as {
+        contact?: string;
+        avatarUrl?: string | null;
+        tier?: Tier;
+        name?: string;
+        emergency?: string;
+      };
       if (data.contact !== undefined) setContact(data.contact);
       if (data.avatarUrl !== undefined) setAvatarUrl(data.avatarUrl ?? null);
       if (data.tier) setFirestoreTier(data.tier as Tier);
@@ -101,7 +119,7 @@ export default function Membership() {
     return () => unsub();
   }, [uid, isMember]);
 
-// ── Lazy tier maintenance: Jan 1 reset + Platinum 6-month retention ────────
+  // ── Lazy tier maintenance: Jan 1 reset + Platinum 6-month retention ────────
   // Runs client-side whenever the member opens this page (instead of a
   // scheduled Cloud Function). Each rule only fires once per real-world
   // period thanks to the lastTierCheck/lastTierReset stamps.
@@ -110,19 +128,21 @@ export default function Membership() {
 
     async function runTierMaintenance() {
       const userRef = doc(db, "users", uid!);
-const { getDoc } = await import("firebase/firestore");
-const snap = await getDoc(userRef);
-if (!snap.exists()) return;
+      const { getDoc } = await import("firebase/firestore");
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) return;
 
-      const data = snap.data() as any;
+      const data = snap.data() as {
+        tier?: Tier;
+        tierResetAt?: string;
+        lastTierCheck?: string;
+      };
       const currentTier = data.tier as Tier | undefined;
       if (!currentTier) return;
 
       const today = new Date();
       const isJan1 = today.getMonth() === 0 && today.getDate() === 1;
-      const lastResetYear = data.tierResetAt
-        ? new Date(data.tierResetAt).getFullYear()
-        : null;
+      const lastResetYear = data.tierResetAt ? new Date(data.tierResetAt).getFullYear() : null;
 
       // Rule 1: annual reset on Jan 1 — only once per year, even if they
       // open the app multiple times that day.
@@ -138,24 +158,20 @@ if (!snap.exists()) return;
       // check-ins in the trailing 6 months. Checked at most once a day.
       if (currentTier === "Platinum") {
         const lastChecked = data.lastTierCheck ? new Date(data.lastTierCheck) : null;
-        const checkedToday =
-          lastChecked && lastChecked.toDateString() === today.toDateString();
+        const checkedToday = lastChecked && lastChecked.toDateString() === today.toDateString();
 
         if (!checkedToday) {
           const sixMonthsAgo = new Date();
           sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-          const regsQuery = query(
-            collection(db, "eventRegistrations"),
-            where("userId", "==", uid)
-          );
+          const regsQuery = query(collection(db, "eventRegistrations"), where("userId", "==", uid));
           const regsSnap = await getDocs(regsQuery);
           const recentCheckIns = regsSnap.docs.filter((d) => {
-            const r = d.data() as any;
+            const r = d.data() as { checkedInAt?: string };
             return r.checkedInAt && new Date(r.checkedInAt) >= sixMonthsAgo;
           }).length;
 
-          const updates: any = { lastTierCheck: today.toISOString() };
+          const updates: Record<string, string> = { lastTierCheck: today.toISOString() };
           if (recentCheckIns < 12) {
             updates.tier = "Gold";
             updates.tierDowngradedAt = today.toISOString();
@@ -168,32 +184,41 @@ if (!snap.exists()) return;
     runTierMaintenance().catch((err) => console.error("Tier maintenance failed:", err));
   }, [uid, isMember]);
 
-// Live listener for this member's registrations
-useEffect(() => {
-  if (!uid || !isMember) return;
-  const q = query(
-    collection(db, "eventRegistrations"),  // ← was "registrations"
-    where("userId", "==", uid)
-  );
-  const unsub = onSnapshot(q, (snap) => {
-    const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    setLiveRegistrations(regs);
-    // Only count events where the member actually checked in
-    setLiveRaceCount(regs.filter((r) => r.checkedInAt).length);
-  });
-  return () => unsub();
-}, [uid, isMember]);
+  // Live listener for this member's registrations
+  useEffect(() => {
+    if (!uid || !isMember) return;
+    const q = query(
+      collection(db, "eventRegistrations"), // ← was "registrations"
+      where("userId", "==", uid),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as { eventId: string; checkedInAt?: string }) }));
+      setLiveRegistrations(regs);
+      // Only count events where the member actually checked in
+      setLiveRaceCount(regs.filter((r) => r.checkedInAt).length);
+    });
+    return () => unsub();
+  }, [uid, isMember]);
 
-// right after the eventRegistrations useEffect, add:
-useEffect(() => {
+  // right after the eventRegistrations useEffect, add:
+  useEffect(() => {
+    if (!uid) return;
+    const unsub = onSnapshot(collection(db, "rewards"), (snap) => {
+      setFirestoreRewards(snap.docs.map((d) => ({ id: d.id, ...(d.data() as { tier: Tier; title: string; description: string; createdAt?: string; expiresInDays: number }) })));
+    });
+    return () => unsub();
+  }, [uid]);
+
+  useEffect(() => {
   if (!uid) return;
-  const unsub = onSnapshot(collection(db, "rewards"), (snap) => {
-    setFirestoreRewards(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+  const q = query(collection(db, "redemptions"), where("userId", "==", uid));
+  const unsub = onSnapshot(q, (snap) => {
+    setRedemptions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as { rewardId: string; redeemedAt: string }) })));
   });
   return () => unsub();
 }, [uid]);
 
-function startEditing() {
+  function startEditing() {
     setDraftName(me?.name ?? "");
     setDraftContact(contact);
     setDraftEmergencyName(emergencyName);
@@ -204,14 +229,14 @@ function startEditing() {
     setEditing(true);
   }
 
-function cancelEditing() {
+  function cancelEditing() {
     setEditing(false);
     setNameError("");
     setContactError("");
     setEmergencyNumberError("");
   }
 
-async function saveProfile() {
+  async function saveProfile() {
     let valid = true;
     if (!draftName.trim()) {
       setNameError("Name cannot be empty.");
@@ -254,7 +279,33 @@ async function saveProfile() {
     }
   }
 
-async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleRedeemReward(rewardId: string) {
+  if (!uid) return;
+  try {
+    await addDoc(collection(db, "redemptions"), {
+      userId: uid,
+      rewardId,
+      redeemedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error(err);
+    toast.error("Could not save redemption. Please try again.");
+  }
+}
+
+async function handleRemoveRedemption(rewardId: string) {
+  const entry = redemptions.find((r) => r.rewardId === rewardId);
+  if (!entry) return;
+  try {
+    await deleteDoc(doc(db, "redemptions", entry.id));
+    toast.success("Reward removed from your list.");
+  } catch (err) {
+    console.error(err);
+    toast.error("Could not remove reward.");
+  }
+}
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !uid) return;
     const allowed = ["image/jpeg", "image/png", "image/webp"];
@@ -302,8 +353,6 @@ async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     }
   }
 
-
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -321,8 +370,8 @@ async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
           </div>
           <h1 className="mt-6 display text-3xl">Join to unlock.</h1>
           <p className="mt-4 text-muted-foreground">
-            Tier progression, rewards and your event history live here. Become a
-            member to start counting your events.
+            Tier progression, rewards and your event history live here. Become a member to start
+            counting your events.
           </p>
           <div className="mt-8 flex flex-wrap gap-3 justify-center">
             <Link
@@ -339,33 +388,6 @@ async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
             </Link>
           </div>
         </section>
-
-      </div>
-    );
-  }
-
-  if (!isMember) {
-    return (
-      <div className="min-h-screen bg-background">
-        <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-24 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            <Lock size={11} className="text-primary" /> Club Members only
-          </div>
-          <h1 className="mt-6 display text-3xl">Upgrade to Member.</h1>
-          <p className="mt-4 text-muted-foreground">
-            You're registered as an Open Runner. Open Runners can join the easy
-            runs, but the tier system, rewards and Members-only events require a
-            full club membership.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3 justify-center">
-            <Link
-              to="/join"
-              className="rounded-full bg-primary px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-glow"
-            >
-              Upgrade to Member
-            </Link>
-          </div>
-        </section>
       </div>
     );
   }
@@ -374,16 +396,12 @@ async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
   const me =
     currentMember ??
     (authEmail
-      ? state.members.find(
-          (m) => m.email.toLowerCase() === authEmail.toLowerCase()
-        )
+      ? state.members.find((m) => m.email.toLowerCase() === authEmail.toLowerCase())
       : null) ??
     (user
       ? {
           id: uid ?? `member:${(authEmail ?? "unknown").toLowerCase()}`,
-          name:
-            user.displayName?.trim() ||
-            (authEmail ? authEmail.split("@")[0] : "Member"),
+          name: user.displayName?.trim() || (authEmail ? authEmail.split("@")[0] : "Member"),
           email: authEmail ?? "",
           joined: new Date().toISOString().slice(0, 10),
           races: 0,
@@ -392,7 +410,7 @@ async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
         }
       : null);
 
-if (!me) return null;
+  if (!me) return null;
   // Override with live Firestore values if available
   const effectiveMe = {
     ...me,
@@ -400,31 +418,35 @@ if (!me) return null;
     name: firestoreName ?? me.name,
   };
   const name = effectiveMe.name;
-  const initials = name.split(" ").map((s: string) => s[0]).slice(0, 2).join("");
+  const initials = name
+    .split(" ")
+    .map((s: string) => s[0])
+    .slice(0, 2)
+    .join("");
 
   // Prefer live Firestore race count; fall back to store value
   const raceCount = liveRaceCount ?? me.races;
 
-const tierThresholds: Record<Tier, number> = { Pink: 0, Silver: 12, Gold: 24, Platinum: 36 };
-const currentTierMin = tierThresholds[effectiveMe.tier];
-const effectiveRaceCount = Math.max(raceCount, currentTierMin);
-const { next, needed, target } = nextTierInfo(effectiveRaceCount);
-const progress = Math.min(100, (effectiveRaceCount / target) * 100);
-const tierOrder: Tier[] = ["Pink", "Silver", "Gold", "Platinum"];
-const myTierIndex = tierOrder.indexOf(effectiveMe.tier);
-const now = Date.now();
-const myRewards = firestoreTier === null
-  ? []
-  : firestoreRewards.filter((r) => {
-      if (r.tier !== firestoreTier) return false;
-      if (!r.createdAt) return true; // no date stamp, don't block it
-      const created = new Date(r.createdAt).getTime();
-      const expiry = created + r.expiresInDays * 24 * 60 * 60 * 1000;
-      return now <= expiry;
-    });
-  const redeemed = new Set(myRedemptions().map((r) => r.rewardId));
+  const tierThresholds: Record<Tier, number> = { Pink: 0, Silver: 12, Gold: 24, Platinum: 36 };
+  const currentTierMin = tierThresholds[effectiveMe.tier];
+  const effectiveRaceCount = Math.max(raceCount, currentTierMin);
+  const { next, needed, target } = nextTierInfo(effectiveRaceCount);
+  const progress = Math.min(100, (effectiveRaceCount / target) * 100);
+  const tierOrder: Tier[] = ["Pink", "Silver", "Gold", "Platinum"];
+  const myTierIndex = tierOrder.indexOf(effectiveMe.tier);
+  const now = Date.now();
+  const myRewards =
+    firestoreTier === null
+      ? []
+      : firestoreRewards.filter((r) => {
+          if (r.tier !== firestoreTier) return false;
+          if (!r.createdAt) return true; // no date stamp, don't block it
+          const created = new Date(r.createdAt).getTime();
+          const expiry = created + r.expiresInDays * 24 * 60 * 60 * 1000;
+          return now <= expiry;
+        });
+const redeemed = new Set(redemptions.map((r) => r.rewardId));
 
- 
   // Upcoming events: match live registrations against the event list
   const registeredEventIds = new Set(liveRegistrations.map((r) => r.eventId));
   const today = new Date();
@@ -437,22 +459,23 @@ const myRewards = firestoreTier === null
 
   return (
     <div className="min-h-screen bg-background">
-
-<section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-16 pb-8">
-        <div className="text-xs uppercase tracking-[0.3em] text-primary">
-          Member Dashboard
-        </div>
+      <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pt-16 pb-8">
+        <div className="text-xs uppercase tracking-[0.3em] text-primary">Member Dashboard</div>
         <div className="mt-4 flex items-center gap-4">
           <label className="relative cursor-pointer group">
             <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-accent overflow-hidden ring-2 ring-border flex items-center justify-center text-xl font-bold text-primary-foreground">
-              {avatarUrl
-                ? <img src={avatarUrl} alt={me.name} className="h-full w-full object-cover" />
-                : initials}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={me.name} className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
             </div>
             <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              {uploadingAvatar
-                ? <Loader2 size={16} className="animate-spin text-white" />
-                : <Pencil size={14} className="text-white" />}
+              {uploadingAvatar ? (
+                <Loader2 size={16} className="animate-spin text-white" />
+              ) : (
+                <Pencil size={14} className="text-white" />
+              )}
             </div>
             <input
               type="file"
@@ -462,8 +485,8 @@ const myRewards = firestoreTier === null
               disabled={uploadingAvatar}
             />
           </label>
-      <div>
-        <h1 className="display text-3xl">Hey {effectiveMe.name.split(" ")[0]}.</h1>
+          <div>
+            <h1 className="display text-3xl">Hey {effectiveMe.name.split(" ")[0]}.</h1>
             <p className="mt-1 text-sm text-muted-foreground">Here's where you stand.</p>
             {avatarUrl && (
               <button
@@ -490,32 +513,30 @@ const myRewards = firestoreTier === null
           >
             {effectiveMe.tier}
           </div>
-  <div className="mt-1 text-xs text-muted-foreground">
-  {effectiveMe.tier === "Platinum"
-    ? "Top tier reached"
-    : `${needed} more events to ${next}`}
-</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {effectiveMe.tier === "Platinum"
+              ? "Top tier reached"
+              : `${needed} more events to ${next}`}
+          </div>
         </div>
 
-<div className="rounded-3xl border border-border bg-card p-7">
-  <Calendar className="text-primary" />
-  <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-    Events checked in
-  </div>
-  <div className="mt-2 display text-4xl">{raceCount}</div>
-  <div className="mt-1 text-xs text-muted-foreground">
-    counts toward your tier
-  </div>
-</div>
+        <div className="rounded-3xl border border-border bg-card p-7">
+          <Calendar className="text-primary" />
+          <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+            Events checked in
+          </div>
+          <div className="mt-2 display text-4xl">{raceCount}</div>
+          <div className="mt-1 text-xs text-muted-foreground">counts toward your tier</div>
+        </div>
 
         <div className="rounded-3xl border border-border bg-card p-7">
           <Gift className="text-primary" />
           <div className="mt-4 text-xs uppercase tracking-[0.3em] text-muted-foreground">
             Rewards available
           </div>
-<div className="mt-2 display text-4xl">
-  {myRewards.filter((r) => !redeemed.has(r.id)).length}
-</div>
+          <div className="mt-2 display text-4xl">
+            {myRewards.filter((r) => !redeemed.has(r.id)).length}
+          </div>
         </div>
       </section>
 
@@ -536,17 +557,8 @@ const myRewards = firestoreTier === null
         <div className="mt-6 rounded-3xl border border-border bg-card p-6 md:p-8 space-y-5">
           {/* Name & email — read-only */}
           <div className="grid gap-4 sm:grid-cols-2">
-         <ProfileField
-              icon={User}
-              label="Full name"
-              value={me.name}
-            />
-            <ProfileField
-              icon={User}
-              label="Email"
-              value={me.email}
-              locked
-            />
+            <ProfileField icon={User} label="Full name" value={me.name} />
+            <ProfileField icon={User} label="Email" value={me.email} locked />
           </div>
 
           {/* Contact & emergency — editable */}
@@ -554,19 +566,13 @@ const myRewards = firestoreTier === null
             <div className="space-y-4">
               <div className="flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2 text-[11px] text-primary">
                 <ShieldCheck size={13} />
-                These details are used to pre-fill event sign-ups and shared
-                with organisers in an emergency.
+                These details are used to pre-fill event sign-ups and shared with organisers in an
+                emergency.
               </div>
 
               <div>
-                <EditField
-                  label="Full name"
-                  value={draftName}
-                  onChange={setDraftName}
-                />
-                {nameError && (
-                  <p className="mt-1 text-[11px] text-destructive">{nameError}</p>
-                )}
+                <EditField label="Full name" value={draftName} onChange={setDraftName} />
+                {nameError && <p className="mt-1 text-[11px] text-destructive">{nameError}</p>}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -578,9 +584,7 @@ const myRewards = firestoreTier === null
                     type="tel"
                   />
                   {contactError && (
-                    <p className="mt-1 text-[11px] text-destructive">
-                      {contactError}
-                    </p>
+                    <p className="mt-1 text-[11px] text-destructive">{contactError}</p>
                   )}
                 </div>
                 <div>
@@ -598,9 +602,7 @@ const myRewards = firestoreTier === null
                     type="tel"
                   />
                   {emergencyNumberError && (
-                    <p className="mt-1 text-[11px] text-destructive">
-                      {emergencyNumberError}
-                    </p>
+                    <p className="mt-1 text-[11px] text-destructive">{emergencyNumberError}</p>
                   )}
                 </div>
               </div>
@@ -611,11 +613,7 @@ const myRewards = firestoreTier === null
                   disabled={saving}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground disabled:opacity-60 active:scale-95 transition-transform"
                 >
-                  {saving ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Check size={13} />
-                  )}
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                   {saving ? "Saving…" : "Save changes"}
                 </button>
                 <button
@@ -629,11 +627,7 @@ const myRewards = firestoreTier === null
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
-              <ProfileField
-                icon={Phone}
-                label="Contact number"
-                value={contact || "—"}
-              />
+              <ProfileField icon={Phone} label="Contact number" value={contact || "—"} />
               <ProfileField
                 icon={ShieldCheck}
                 label="Emergency contact"
@@ -647,9 +641,7 @@ const myRewards = firestoreTier === null
           )}
 
           {!profileFetched && !editing && (
-            <p className="text-[11px] text-muted-foreground">
-              Loading profile…
-            </p>
+            <p className="text-[11px] text-muted-foreground">Loading profile…</p>
           )}
         </div>
       </section>
@@ -669,19 +661,11 @@ const myRewards = firestoreTier === null
               <div
                 key={t}
                 className={`rounded-xl border p-4 text-center ${
-              effectiveMe.tier === t
-                    ? "border-primary bg-primary/10"
-                    : "border-border"
+                  effectiveMe.tier === t ? "border-primary bg-primary/10" : "border-border"
                 }`}
               >
-                <Award
-                  className="mx-auto"
-                  style={{ color: tierMeta[t].color }}
-                />
-                <div
-                  className="mt-2 display text-lg"
-                  style={{ color: tierMeta[t].color }}
-                >
+                <Award className="mx-auto" style={{ color: tierMeta[t].color }} />
+                <div className="mt-2 display text-lg" style={{ color: tierMeta[t].color }}>
                   {t}
                 </div>
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -691,8 +675,7 @@ const myRewards = firestoreTier === null
             ))}
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
-            Tiers reset every January 1. Platinum stays if you log 12+ events
-            in any 6-month window.
+            Tiers reset every January 1. Platinum stays if you log 12+ events in any 6-month window.
           </p>
         </div>
       </section>
@@ -723,37 +706,40 @@ const myRewards = firestoreTier === null
                         {r.tier}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {r.description}
-                    </p>
-<div className="mt-3 flex items-center gap-3 flex-wrap">
+                    <p className="text-sm text-muted-foreground mt-1">{r.description}</p>
+                    <div className="mt-3 flex items-center gap-3 flex-wrap">
+                      <button
+                        disabled={isRedeemed}
+                        onClick={() => setScanningReward({ id: r.id, title: r.title })}
+                        className="rounded-full bg-primary px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-transform"
+                      >
+                        {isRedeemed ? "Redeemed" : "Redeem"}
+                      </button>
+{isRedeemed ? (
   <button
-    disabled={isRedeemed}
-    onClick={() => setScanningReward({ id: r.id, title: r.title })}
-    className="rounded-full bg-primary px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-transform"
+    onClick={() => {
+      if (confirm("Remove this redeemed reward from your list?")) {
+        handleRemoveRedemption(r.id);
+      }
+    }}
+    className="rounded-full border border-border px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:border-destructive hover:text-destructive active:scale-95 transition-all"
   >
-    {isRedeemed ? "Redeemed" : "Redeem"}
+    Remove
   </button>
-  {isRedeemed ? (
-    <button
-      onClick={() => {
-        if (confirm("Remove this redeemed reward from your list?")) {
-          redeem(r.id); // calling redeem again won't double-redeem if your store guards it
-          // If your store has a removeRedemption or similar, use that instead.
-          // For now, filter it out of the redeemed set visually:
-          toast.success("Reward removed from your list.");
-        }
-      }}
-      className="rounded-full border border-border px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:border-destructive hover:text-destructive active:scale-95 transition-all"
-    >
-      Remove
-    </button>
-  ) : (
-    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-      Expires in {r.expiresInDays} days
-    </span>
-  )}
-</div>
+) : (
+  <span
+    className={`text-[10px] uppercase tracking-widest ${
+      daysLeftFor(r) !== null && daysLeftFor(r)! <= 5
+        ? "text-destructive"
+        : "text-muted-foreground"
+    }`}
+  >
+    {daysLeftFor(r) !== null
+      ? `${daysLeftFor(r)} day${daysLeftFor(r) !== 1 ? "s" : ""} left to redeem`
+      : `Expires in ${r.expiresInDays} days`}
+  </span>
+)}
+                    </div>
                   </div>
                 </div>
               );
@@ -778,15 +764,11 @@ const myRewards = firestoreTier === null
             {myUpcoming.map((e) => {
               const reg = liveRegistrations.find((r) => r.eventId === e.id);
               return (
-                <div
-                  key={e.id}
-                  className="flex items-center justify-between p-5"
-                >
+                <div key={e.id} className="flex items-center justify-between p-5">
                   <div>
                     <div className="display text-lg">{e.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(e.date).toDateString()} · {e.time} ·{" "}
-                      {e.meetingPlace}
+                      {new Date(e.date).toDateString()} · {e.time} · {e.meetingPlace}
                     </div>
                   </div>
                   <span
@@ -801,21 +783,20 @@ const myRewards = firestoreTier === null
             })}
           </div>
         )}
-</section>
+      </section>
 
 {scanningReward && (
   <QRScanModal
     rewardTitle={scanningReward.title}
     expectedCode={`LFR-REDEEM-${(effectiveMe.tier ?? "SILVER").toUpperCase()}`}
     onSuccess={() => {
-      redeem(scanningReward.id);
+      handleRedeemReward(scanningReward.id);
       toast.success(`Redeemed: ${scanningReward.title}`);
       setScanningReward(null);
     }}
     onClose={() => setScanningReward(null)}
   />
 )}
-
     </div>
   );
 }
@@ -827,7 +808,7 @@ function ProfileField({
   value,
   locked = false,
 }: {
-  icon: any;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
   value: string;
   locked?: boolean;
@@ -859,88 +840,78 @@ function QRScanModal({
   onSuccess: () => void;
   onClose: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
-  const streamRef = useRef<MediaStream | null>(null);
-  const animRef = useRef<number | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const readerId = useRef(`qr-reader-${Math.random().toString(36).slice(2)}`).current;
 
   const tierLabel = expectedCode.replace("LFR-REDEEM-", "");
   const tierColors: Record<string, string> = {
-    SILVER: "#9ca3af", GOLD: "#f59e0b", PLATINUM: "#a78bfa", PINK: "#e91e8c",
+    SILVER: "#9ca3af",
+    GOLD: "#f59e0b",
+    PLATINUM: "#a78bfa",
+    PINK: "#e91e8c",
   };
   const tierColor = tierColors[tierLabel] ?? "#e91e8c";
 
-  async function startCamera() {
+  // Just flip the flag — this triggers the div to render.
+  function startCamera() {
     setError("");
     setScanning(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        scanLoop();
-      }
-    } catch {
-      setError("Could not access camera. Please allow camera access and try again.");
-      setScanning(false);
-    }
-  }
-
-  function scanLoop() {
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) {
-      animRef.current = requestAnimationFrame(scanLoop);
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(video, 0, 0);
-    try {
-      // @ts-ignore — BarcodeDetector is available on modern mobile browsers
-      if ("BarcodeDetector" in window) {
-        // @ts-ignore
-        new window.BarcodeDetector({ formats: ["qr_code"] })
-          .detect(canvas)
-          .then((codes: any[]) => {
-            if (codes.length > 0) {
-              const value = codes[0].rawValue;
-              if (value === expectedCode) {
-                stopCamera();
-                onSuccess();
-              } else {
-                stopCamera();
-                toast.error(`Wrong QR code. Ask admin for the ${tierLabel} tier code.`);
-              }
-            } else {
-              animRef.current = requestAnimationFrame(scanLoop);
-            }
-          });
-      } else {
-        // Fallback: keep looping, user may not have BarcodeDetector
-        animRef.current = requestAnimationFrame(scanLoop);
-      }
-    } catch {
-      animRef.current = requestAnimationFrame(scanLoop);
-    }
   }
 
   function stopCamera() {
-    if (animRef.current) cancelAnimationFrame(animRef.current);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) {
+      scanner
+        .stop()
+        .then(() => scanner.clear())
+        .catch(() => {});
+    }
     setScanning(false);
   }
+
+  // Only touch the DOM/camera once the reader div has actually mounted.
+  useEffect(() => {
+    if (!scanning) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const scanner = new Html5Qrcode(readerId);
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 220 },
+          (decodedText) => {
+            stopCamera();
+            if (decodedText === expectedCode) {
+              onSuccess();
+            } else {
+              toast.error(`Wrong QR code. Ask admin for the ${tierLabel} tier code.`);
+            }
+          },
+          () => {
+            // per-frame miss — expected, ignore
+          },
+        );
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setError("Could not access camera. Please allow camera access and try again.");
+        setScanning(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scanning]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => stopCamera();
   }, []);
-
 
   return (
     <div
@@ -951,15 +922,27 @@ function QRScanModal({
         className="relative w-full max-w-sm rounded-3xl border border-border bg-card p-6 flex flex-col items-center gap-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={() => { stopCamera(); onClose(); }} className="absolute right-4 top-4 text-muted-foreground hover:text-foreground">
+        <button
+          onClick={() => {
+            stopCamera();
+            onClose();
+          }}
+          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
+        >
           <X size={18} />
         </button>
 
         <div className="text-center">
           <div className="display text-xl">Redeem reward</div>
-          <p className="text-xs uppercase tracking-widest mt-1" style={{ color: tierColor }}>{rewardTitle}</p>
+          <p className="text-xs uppercase tracking-widest mt-1" style={{ color: tierColor }}>
+            {rewardTitle}
+          </p>
           <p className="text-sm text-muted-foreground mt-2">
-            Ask admin for the <span style={{ color: tierColor }} className="font-semibold">{tierLabel}</span> QR code, then scan it.
+            Ask admin for the{" "}
+            <span style={{ color: tierColor }} className="font-semibold">
+              {tierLabel}
+            </span>{" "}
+            QR code, then scan it.
           </p>
         </div>
 
@@ -972,13 +955,10 @@ function QRScanModal({
           </button>
         ) : (
           <div className="w-full space-y-3">
-            <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-black">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              {/* Viewfinder overlay */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-48 h-48 border-2 rounded-xl" style={{ borderColor: tierColor }} />
-              </div>
-            </div>
+            <div
+              id={readerId}
+              className="relative w-full aspect-square rounded-2xl overflow-hidden bg-black [&_video]:!w-full [&_video]:!h-full [&_video]:object-cover"
+            />
             <button
               onClick={stopCamera}
               className="w-full rounded-full border border-border py-2.5 text-xs uppercase tracking-widest text-muted-foreground hover:text-destructive hover:border-destructive transition"
@@ -1008,9 +988,7 @@ function EditField({
 }) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-        {label}
-      </span>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</span>
       <input
         type={type}
         value={value}

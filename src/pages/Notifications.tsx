@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, X } from "lucide-react";
+import { Bell, X, BellRing } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
 import {
   subscribeToNotifications,
   markNotificationRead,
+  savePushToken,
+  hideNotificationForUser,
   type Notification,
 } from "@/lib/notificationService";
 import { doc, onSnapshot as fsOnSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { requestPushToken } from "@/lib/firebase";
 
 const tierRank: Record<string, number> = { Pink: 0, Silver: 1, Gold: 2, Platinum: 3 };
 
@@ -30,6 +33,31 @@ export default function NotificationsPage() {
   const effectiveMember = currentMember ?? authMember;
   const uid = user?.uid ?? effectiveMember?.id ?? currentOpen?.id ?? null;
   const role = effectiveMember ? "members" : currentOpen ? "open" : null;
+  const [pushStatus, setPushStatus] = useState<
+    "idle" | "asking" | "granted" | "denied" | "unsupported"
+  >("idle");
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") {
+      setPushStatus("unsupported");
+      return;
+    }
+    if (Notification.permission === "granted") setPushStatus("granted");
+    else if (Notification.permission === "denied") setPushStatus("denied");
+    else setPushStatus("idle");
+  }, []);
+
+  async function handleEnablePush() {
+    if (!uid) return;
+    setPushStatus("asking");
+    const token = await requestPushToken();
+    if (token) {
+      await savePushToken(uid, token);
+      setPushStatus("granted");
+    } else {
+      setPushStatus(Notification.permission === "denied" ? "denied" : "idle");
+    }
+  }
 
   useEffect(() => {
     document.title = "Notifications · Waven Harper Fitness";
@@ -60,15 +88,19 @@ export default function NotificationsPage() {
   // Derive visible notifications only when both are loaded
   const loading = !notifsLoaded || !tierLoaded;
 
-  const notifs = loading ? [] : allNotifs.filter((n) => {
-    if (n.audience !== "all" && n.audience !== role) return false;
-    if (role !== "members") return true;
-if (n.minTier) {
-      if (!liveTier) return false;
-      return liveTier === n.minTier;
-    }
-    return true;
-  });
+  const notifs = loading
+    ? []
+    : allNotifs.filter((n) => {
+        if (uid && n.deletedBy?.includes(uid)) return false; // hide for this user only, never delete
+        if (n.userId) return n.userId === uid; // personal notification (e.g. check-in reminder) — only for its owner
+        if (n.audience !== "all" && n.audience !== role) return false;
+        if (role !== "members") return true;
+        if (n.minTier) {
+          if (!liveTier) return false;
+          return liveTier === n.minTier;
+        }
+        return true;
+      });
 
   const unreadIds = uid
     ? new Set(notifs.filter((n) => !n.readBy.includes(uid)).map((n) => n.id))
@@ -91,34 +123,62 @@ if (n.minTier) {
     if (n.link) navigate(n.link);
   }
 
+  async function handleDeleteOne(id: string) {
+    if (!uid) return;
+    if (!confirm("Remove this notification?")) return;
+    try {
+      await hideNotificationForUser(id, uid);
+    } catch {
+      // non-blocking
+    }
+  }
+
+  async function handleClearAll() {
+    if (!uid) return;
+    if (!confirm("Clear all your notifications?")) return;
+    try {
+      await Promise.all(notifs.map((n) => hideNotificationForUser(n.id, uid)));
+    } catch {
+      // non-blocking
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <section className="mx-auto max-w-md md:max-w-2xl px-5 md:px-8 pt-14 pb-6">
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Updates</div>
         <h1 className="mt-2 display text-4xl md:text-6xl">Notifications.</h1>
-{!loading && notifs.length > 0 && (
-  <div className="flex items-center justify-between mt-3">
-    <p className="text-sm text-muted-foreground">
-      {unreadIds.size > 0
-        ? `${unreadIds.size} unread · ${notifs.length} total`
-        : `${notifs.length} notification${notifs.length !== 1 ? "s" : ""} · all read`}
-    </p>
-    <button
-      onClick={async () => {
-        if (!confirm("Clear all your notifications?")) return;
-        try {
-          const { deleteDoc, doc: fsDoc } = await import("firebase/firestore");
-          await Promise.all(notifs.map((n) => deleteDoc(fsDoc(db, "notifications", n.id))));
-        } catch {
-          // non-blocking
-        }
-      }}
-      className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors"
-    >
-      Clear all
-    </button>
-  </div>
-)}
+
+        {uid && pushStatus !== "granted" && pushStatus !== "unsupported" && (
+          <button
+            onClick={handleEnablePush}
+            disabled={pushStatus === "asking" || pushStatus === "denied"}
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs uppercase tracking-widest text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <BellRing size={13} />
+            {pushStatus === "asking"
+              ? "Requesting…"
+              : pushStatus === "denied"
+                ? "Notifications blocked — enable in browser settings"
+                : "Enable push notifications"}
+          </button>
+        )}
+
+        {!loading && notifs.length > 0 && (
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-sm text-muted-foreground">
+              {unreadIds.size > 0
+                ? `${unreadIds.size} unread · ${notifs.length} total`
+                : `${notifs.length} notification${notifs.length !== 1 ? "s" : ""} · all read`}
+            </p>
+            <button
+              onClick={handleClearAll}
+              className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="mx-auto max-w-md md:max-w-2xl px-5 md:px-8 pb-20">
@@ -144,63 +204,59 @@ if (n.minTier) {
           </div>
         ) : (
           <div className="space-y-3">
-{notifs.map((n) => {
-  const isUnread = uid ? unreadIds.has(n.id) : false;
-  const isClickable = Boolean(n.link);
-  return (
-    <div
-      key={n.id}
-      className={`
-        group relative rounded-2xl border bg-card p-5 transition-all
-        ${isUnread ? "border-primary/30 bg-primary/5" : "border-border"}
-        ${isClickable ? "cursor-pointer hover:border-primary/50 active:scale-[0.99]" : ""}
-      `}
-    >
-      {isUnread && (
-        <span className="absolute top-5 right-5 h-2 w-2 rounded-full bg-primary" />
-      )}
-      {/* Delete button — top right, shown on hover */}
-      <button
-        onClick={async (ev) => {
-          ev.stopPropagation();
-          if (!confirm("Remove this notification?")) return;
-          try {
-            const { deleteDoc, doc: fsDoc } = await import("firebase/firestore");
-            await deleteDoc(fsDoc(db, "notifications", n.id));
-          } catch {
-            // non-blocking
-          }
-        }}
-        className={`absolute top-4 right-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all ${isUnread ? "right-8" : ""}`}
-        aria-label="Delete notification"
-      >
-        <X size={14} />
-      </button>
+            {notifs.map((n) => {
+              const isUnread = uid ? unreadIds.has(n.id) : false;
+              const isClickable = Boolean(n.link);
+              return (
+                <div
+                  key={n.id}
+                  className={`
+                    group relative rounded-2xl border bg-card p-5 transition-all
+                    ${isUnread ? "border-primary/30 bg-primary/5" : "border-border"}
+                    ${isClickable ? "cursor-pointer hover:border-primary/50 active:scale-[0.99]" : ""}
+                  `}
+                >
+                  {isUnread && (
+                    <span className="absolute top-5 right-5 h-2 w-2 rounded-full bg-primary" />
+                  )}
+                  {/* Delete button — removes for this user only */}
+                  <button
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      handleDeleteOne(n.id);
+                    }}
+                    className={`absolute top-4 right-4 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all ${isUnread ? "right-8" : ""}`}
+                    aria-label="Delete notification"
+                  >
+                    <X size={14} />
+                  </button>
 
-      <div
-        onClick={() => isClickable && handleClick(n)}
-        className="w-full"
-      >
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-2">
-          {new Date(n.createdAt).toLocaleDateString("en-ZA", {
-            day: "numeric", month: "short", year: "numeric",
-            hour: "2-digit", minute: "2-digit",
-          })}
-          {n.minTier && <span className="ml-2 opacity-60">· {n.minTier}+</span>}
-        </div>
-        <div className={`display text-lg leading-snug ${isUnread ? "text-foreground" : "text-foreground/80"}`}>
-          {n.title}
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">{n.body}</p>
-        {isClickable && (
-          <div className="mt-3 text-[10px] uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-            Tap to view →
-          </div>
-        )}
-      </div>
-    </div>
-  );
-})}
+                  <div onClick={() => isClickable && handleClick(n)} className="w-full">
+                    <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-2">
+                      {new Date(n.createdAt).toLocaleDateString("en-ZA", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {n.minTier && <span className="ml-2 opacity-60">· {n.minTier}+</span>}
+                    </div>
+                    <div
+                      className={`display text-lg leading-snug ${isUnread ? "text-foreground" : "text-foreground/80"}`}
+                    >
+                      {n.title}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{n.body}</p>
+                    {isClickable && (
+                      <div className="mt-3 text-[10px] uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                        Tap to view →
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

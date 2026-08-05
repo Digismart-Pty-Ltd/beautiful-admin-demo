@@ -18,7 +18,7 @@ const EVENTS_COL = "events";
 // ── Convert an image file into a compressed base64 data URL ─────────────────
 export async function uploadEventImage(
   file: File,
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
 ): Promise<string> {
   onProgress?.(10);
 
@@ -95,7 +95,7 @@ export async function uploadEventImage(
 
 // ── Create event document in Firestore ───────────────────────────────────────
 export async function createEventInFirestore(
-  data: Omit<Event, "id" | "attendees">
+  data: Omit<Event, "id" | "attendees">,
 ): Promise<string> {
   const docRef = await addDoc(collection(db, EVENTS_COL), {
     ...data,
@@ -107,7 +107,7 @@ export async function createEventInFirestore(
 // ── Update event document in Firestore ───────────────────────────────────────
 export async function updateEventInFirestore(
   id: string,
-  data: Partial<Omit<Event, "id" | "attendees">>
+  data: Partial<Omit<Event, "id" | "attendees">>,
 ) {
   await updateDoc(doc(db, EVENTS_COL, id), {
     ...data,
@@ -121,9 +121,7 @@ export async function deleteEventFromFirestore(id: string) {
 }
 
 // ── Real-time listener — calls back with sorted events array ─────────────────
-export function subscribeToEvents(
-  callback: (events: Event[]) => void
-): () => void {
+export function subscribeToEvents(callback: (events: Event[]) => void): () => void {
   const q = query(collection(db, EVENTS_COL), orderBy("date", "asc"));
   return onSnapshot(q, (snap) => {
     const events: Event[] = snap.docs.map((d) => ({
