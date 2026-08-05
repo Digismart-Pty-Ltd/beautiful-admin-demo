@@ -722,6 +722,15 @@ function Overview() {
     });
     return () => unsub();
   }, []);
+
+  const [pendingAdverts, setPendingAdverts] = useState(0);
+  useEffect(() => {
+    const unsub = subscribeToAdvertisements((rows) =>
+      setPendingAdverts(rows.filter((a) => a.status === "pending").length),
+    );
+    return () => unsub();
+  }, []);
+
   const checkedIn = registrations.filter((r) => r.checkedInAt).length;
 
   // Only count upcoming events in the stat
@@ -763,6 +772,15 @@ function Overview() {
                   : `${10 - pendingOrders} more until email batch`}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+            {pendingAdverts > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5 flex items-center gap-3">
+          <Megaphone className="text-primary" size={20} />
+          <div className="font-semibold">
+            {pendingAdverts} advertising application{pendingAdverts !== 1 ? "s" : ""} awaiting review
           </div>
         </div>
       )}
@@ -823,6 +841,8 @@ function Overview() {
     </div>
   );
 }
+
+
 
 // ─── Events Admin ─────────────────────────────────────────────────────────────
 
