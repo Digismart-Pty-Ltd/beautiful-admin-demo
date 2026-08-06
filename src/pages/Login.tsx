@@ -31,7 +31,7 @@ export default function Login() {
         typeof Notification !== "undefined" && Notification.permission === "granted";
 
       if (!pushGranted) {
-        nav("/notifications", { replace: true });
+        nav("/notifications", { replace: true, state: { fromLogin: true } });
       } else {
         nav(isMember ? "/membership" : "/events", { replace: true });
       }

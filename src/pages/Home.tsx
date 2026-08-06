@@ -5,7 +5,7 @@ import { formatDistanceKm } from "@/lib/utils";
 import community from "@/assets/community.jpg";
 import lfr from "@/assets/lfr-logo-clean.png";
 import trainerPhoto from "@/assets/trainer.jpeg";
-import AdvertiseBanner from "@/components/AdvertiseBanner";
+// import AdvertiseBanner from "@/components/AdvertiseBanner";
 import {
   ArrowUpRight, Dumbbell, MapPin, Users, Clock, ChevronRight, Instagram,
 } from "lucide-react";
@@ -199,7 +199,7 @@ export default function Home() {
         </section>
 
  {/* ── ADVERTISE ── */}
-        <AdvertiseBanner />
+        {/* <AdvertiseBanner /> */}
 
       </main>
     </div>

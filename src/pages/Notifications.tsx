@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Bell, X, BellRing } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
@@ -20,6 +20,8 @@ export default function NotificationsPage() {
   const { currentMember, currentOpen, state } = useStore();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromLogin = (location.state as any)?.fromLogin === true;
 
   const [allNotifs, setAllNotifs] = useState<Notification[]>([]);
   const [notifsLoaded, setNotifsLoaded] = useState(false);
@@ -150,18 +152,25 @@ export default function NotificationsPage() {
         <h1 className="mt-2 display text-4xl md:text-6xl">Notifications.</h1>
 
         {uid && pushStatus !== "granted" && pushStatus !== "unsupported" && (
-          <button
-            onClick={handleEnablePush}
-            disabled={pushStatus === "asking" || pushStatus === "denied"}
-            className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs uppercase tracking-widest text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <BellRing size={13} />
-            {pushStatus === "asking"
-              ? "Requesting…"
-              : pushStatus === "denied"
-                ? "Notifications blocked — enable in browser settings"
-                : "Enable push notifications"}
-          </button>
+          <>
+            {fromLogin && (
+              <p className="mt-4 text-sm text-muted-foreground max-w-xl">
+                If you did not accept notifications earlier, you can enable them here. This is a fallback so you can still receive updates after logging in.
+              </p>
+            )}
+            <button
+              onClick={handleEnablePush}
+              disabled={pushStatus === "asking" || pushStatus === "denied"}
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs uppercase tracking-widest text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <BellRing size={13} />
+              {pushStatus === "asking"
+                ? "Requesting…"
+                : pushStatus === "denied"
+                  ? "Notifications blocked — enable in browser settings"
+                  : "Enable push notifications"}
+            </button>
+          </>
         )}
 
         {!loading && notifs.length > 0 && (

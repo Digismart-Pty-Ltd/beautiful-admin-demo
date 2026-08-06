@@ -351,7 +351,7 @@ export default function Admin() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "sponsors", label: "Sponsors", icon: ImagePlus },
-    { id: "adverts", label: "Adverts", icon: Megaphone },
+    // { id: "adverts", label: "Adverts", icon: Megaphone },
   ];
 
   return (
@@ -500,7 +500,7 @@ export default function Admin() {
           {tab === "notifications" && <NotificationsAdmin />}
           {tab === "qrcodes" && <QRCodesAdmin />}
           {tab === "sponsors" && <SponsorsAdmin />}
-          {tab === "adverts" && <AdvertsAdmin />}
+          {/* {tab === "adverts" && <AdvertsAdmin />} */}
         </div>
       </main>
     </div>
