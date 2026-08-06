@@ -5,6 +5,9 @@ import { loginUser } from "@/services/authService";
 import { useAuth } from "@/context/AuthContext";
 import { LogIn, Eye, EyeOff, Mail, ArrowLeft, Loader2 } from "lucide-react";
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
+import { savePushToken } from "@/lib/notificationService";
+import { requestPushToken } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
 type View = "login" | "reset" | "reset-sent";
 
@@ -25,8 +28,10 @@ export default function Login() {
     document.title = "Log In — Waven Harper Fitness";
   }, []);
 
+  const [loginPrompted, setLoginPrompted] = useState(false);
+
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && loginPrompted) {
       const pushGranted =
         typeof Notification !== "undefined" && Notification.permission === "granted";
 
@@ -36,13 +41,20 @@ export default function Login() {
         nav(isMember ? "/membership" : "/events", { replace: true });
       }
     }
-  }, [user, isMember, loading]);
+  }, [user, isMember, loading, loginPrompted]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
       await loginUser(email, password);
+      setLoginPrompted(true);
+      if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+        const token = await requestPushToken();
+        if (token && auth.currentUser) {
+          await savePushToken(auth.currentUser.uid, token);
+        }
+      }
     } catch (err: any) {
       setSubmitting(false);
       switch (err.code) {
