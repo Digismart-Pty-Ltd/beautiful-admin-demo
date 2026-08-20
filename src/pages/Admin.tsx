@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "@/lib/store";
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
@@ -29,6 +29,8 @@ import {
   Bell,
   QrCode,
   Megaphone,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   subscribeToAdvertisements,
@@ -57,6 +59,7 @@ import {
   onSnapshot,
   orderBy,
   doc,
+  limit,
   deleteDoc,
   updateDoc,
   addDoc,
@@ -78,6 +81,7 @@ import {
 
 type Tab = "overview" | "events" | "members" | "rewards" | "orders" | "notifications" | "qrcodes" | "sponsors" | "adverts";
 const ADMIN_PASSWORD = "WavenHarper2026";
+const ITEMS_PER_PAGE = 25;
 
 const tierMeta: Record<Tier, { color: string }> = {
   Pink: { color: "#e91e8c" },
@@ -113,13 +117,55 @@ interface FSRegistration {
   createdAt: any;
 }
 
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary caught:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="rounded-2xl border border-border bg-card p-8 max-w-md text-center">
+            <h1 className="display text-2xl mb-3">Something went wrong</h1>
+            <p className="text-sm text-muted-foreground mb-5">
+              {this.state.error?.message || "An error occurred in the admin panel"}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full rounded-full bg-primary px-4 py-2.5 text-xs font-semibold uppercase text-primary-foreground"
+            >
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 // ─── Notifications Admin ──────────────────────────────────────────────────────
 
 function NotificationsAdmin() {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  // audience state removed — always "all"
   const [saving, setSaving] = useState(false);
   const [clearingAll, setClearingAll] = useState(false);
 
@@ -150,7 +196,7 @@ function NotificationsAdmin() {
     if (!title.trim() || !body.trim()) return;
     setSaving(true);
     try {
-      await createNotification({ title, body, audience: "all" }); // ← hardcoded
+      await createNotification({ title, body, audience: "all" });
       toast.success("Notification sent.");
       setTitle("");
       setBody("");
@@ -218,13 +264,13 @@ function NotificationsAdmin() {
                 Users manage and clear their own notifications from their notifications page.
               </p>
             </div>
-<button
-  onClick={handleClearAll}
-  disabled={clearingAll}
-  className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive whitespace-nowrap disabled:opacity-40"
->
-  {clearingAll ? "Clearing…" : "Clear all"}
-</button>
+            <button
+              onClick={handleClearAll}
+              disabled={clearingAll}
+              className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive whitespace-nowrap disabled:opacity-40"
+            >
+              {clearingAll ? "Clearing…" : "Clear all"}
+            </button>
           </div>
           <ul className="divide-y divide-border">
             {visibleNotifs.map((n) => (
@@ -243,74 +289,138 @@ function NotificationsAdmin() {
     </div>
   );
 }
-// ── Hook: subscribe to all registrations ──────────────────────────────────────
-// Uses no orderBy so missing createdAt fields don't silently break the query.
-// Falls back gracefully on permission errors instead of hanging forever.
+
+// ── Hook: subscribe to all registrations (FIXED) ────────────────────────────────
+
 function useRegistrations() {
   const [registrations, setRegistrations] = useState<FSRegistration[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "eventRegistrations"),
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
+const subscribe = async () => {
+  try {
+    unsubscribe = onSnapshot(
+      query(
+        collection(db, "eventRegistrations"),
+        orderBy("createdAt", "desc"),
+        limit(1000)  // ✅ ADD THIS
+      ),
       (snap) => {
-        const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-        // Sort client-side so missing createdAt fields don't break anything
-        regs.sort((a: any, b: any) => {
-          const ta = a.createdAt?.toMillis?.() ?? 0;
-          const tb = b.createdAt?.toMillis?.() ?? 0;
-          return tb - ta;
-        });
-        setRegistrations(regs);
+            if (!isMounted) return;
+            const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+            regs.sort((a: any, b: any) => {
+              const ta = a.createdAt?.toMillis?.() ?? 0;
+              const tb = b.createdAt?.toMillis?.() ?? 0;
+              return tb - ta;
+            });
+            setRegistrations(regs);
+            setLoading(false);
+            setError(null);
+          },
+          (err) => {
+            if (!isMounted) return;
+            console.error("registrations onSnapshot error:", err);
+            setError(err.message);
+            setLoading(false);
+          }
+        );
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("subscription setup error:", err);
+        setError("Failed to load registrations");
         setLoading(false);
-      },
-      (err) => {
-        console.error("registrations onSnapshot error:", err);
-        setLoading(false); // don't hang — show 0
-      },
-    );
-    return () => unsub();
+      }
+    };
+
+    subscribe();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        try {
+          unsubscribe();
+        } catch (err) {
+          console.error("unsubscribe error:", err);
+        }
+      }
+    };
   }, []);
 
-  return { registrations, loading };
+  return { registrations, loading, error };
 }
 
-// ── Hook: subscribe to all users ──────────────────────────────────────────────
+// ── Hook: subscribe to all users (FIXED) ──────────────────────────────────────
+
 function useUsers() {
   const [members, setMembers] = useState<FSMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "users"),
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
+const subscribe = async () => {
+  try {
+    unsubscribe = onSnapshot(
+      query(
+        collection(db, "users"),
+        orderBy("joined", "desc"),
+        limit(500)  // ✅ ADD THIS
+      ),
       (snap) => {
-        const allUsers = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+            if (!isMounted) return;
+            const allUsers = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
-        // REPLACE WITH (keeps the most recently joined doc per email):
-        const dedup = <T extends { email: string; joined?: string }>(arr: T[]): T[] => {
-          const map = new Map<string, T>();
-          for (const u of arr) {
-            const existing = map.get(u.email);
-            if (!existing || (u.joined ?? "") > (existing.joined ?? "")) {
-              map.set(u.email, u);
-            }
+            const dedup = <T extends { email: string; joined?: string }>(arr: T[]): T[] => {
+              const map = new Map<string, T>();
+              for (const u of arr) {
+                const existing = map.get(u.email);
+                if (!existing || (u.joined ?? "") > (existing.joined ?? "")) {
+                  map.set(u.email, u);
+                }
+              }
+              return Array.from(map.values());
+            };
+
+            setMembers(dedup(allUsers.filter((u: any) => u.role === "member") as FSMember[]));
+            setLoading(false);
+            setError(null);
+          },
+          (err) => {
+            if (!isMounted) return;
+            console.error("users onSnapshot error:", err);
+            setError(err.message);
+            setLoading(false);
           }
-          return Array.from(map.values());
-        };
-
-        setMembers(dedup(allUsers.filter((u: any) => u.role === "member") as FSMember[]));
-
+        );
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("subscription setup error:", err);
+        setError("Failed to load users");
         setLoading(false);
-      },
-      (err) => {
-        console.error("users onSnapshot error:", err);
-        setLoading(false);
-      },
-    );
-    return () => unsub();
+      }
+    };
+
+    subscribe();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        try {
+          unsubscribe();
+        } catch (err) {
+          console.error("unsubscribe error:", err);
+        }
+      }
+    };
   }, []);
 
-  return { members, loading };
+  return { members, loading, error };
 }
 
 // ── Hook: subscribe to events ─────────────────────────────────────────────────
@@ -328,7 +438,7 @@ function todayStr() {
   return new Date().toLocaleDateString("en-CA");
 }
 
-export default function Admin() {
+function AdminCore() {
   const { currentUser, loginAdmin, logout } = useStore();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("overview");
@@ -351,7 +461,6 @@ export default function Admin() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "sponsors", label: "Sponsors", icon: ImagePlus },
-    // { id: "adverts", label: "Adverts", icon: Megaphone },
   ];
 
   return (
@@ -395,7 +504,6 @@ export default function Admin() {
       </aside>
 
       <main className="flex-1 min-w-0">
-        {/* Mobile nav drawer overlay */}
         {mobileNavOpen && (
           <div
             className="fixed inset-0 z-40 bg-background/80 backdrop-blur md:hidden"
@@ -403,7 +511,6 @@ export default function Admin() {
           />
         )}
 
-        {/* Mobile nav drawer */}
         <div
           className={`fixed inset-y-0 left-0 z-50 w-64 max-w-[80vw] flex flex-col border-r border-border bg-card transition-transform duration-200 md:hidden ${
             mobileNavOpen ? "translate-x-0" : "-translate-x-full"
@@ -465,7 +572,6 @@ export default function Admin() {
           style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.5rem)" }}
         >
           <div className="flex items-center gap-3">
-            {/* Hamburger — mobile only */}
             <button
               onClick={() => setMobileNavOpen(true)}
               className="md:hidden text-muted-foreground hover:text-foreground p-2 rounded-md active:scale-95 touch-manipulation"
@@ -491,7 +597,7 @@ export default function Admin() {
             </div>
           </div>
         </header>
-        <div className="p-4 sm:p-6 md:p-10">
+<div className="p-4 sm:p-6 md:p-10 max-h-[calc(100vh-140px)] overflow-y-auto">
           {tab === "overview" && <Overview />}
           {tab === "events" && <EventsAdmin />}
           {tab === "members" && <MembersAdmin />}
@@ -500,10 +606,17 @@ export default function Admin() {
           {tab === "notifications" && <NotificationsAdmin />}
           {tab === "qrcodes" && <QRCodesAdmin />}
           {tab === "sponsors" && <SponsorsAdmin />}
-          {/* {tab === "adverts" && <AdvertsAdmin />} */}
         </div>
       </main>
     </div>
+  );
+}
+
+export default function Admin() {
+  return (
+    <ErrorBoundary>
+      <AdminCore />
+    </ErrorBoundary>
   );
 }
 
@@ -654,14 +767,12 @@ function In({
   const isTime = type === "time";
 
   function handleDateChange(raw: string) {
-    // Accept partial input while typing; only validate complete YYYY-MM-DD strings
     if (!raw) {
       onChange("");
       return;
     }
     if (raw.length === 10) {
       const d = new Date(raw + "T12:00:00");
-      // Reject impossible dates (e.g. Feb 31 parses to Mar 3)
       if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw) return;
     }
     onChange(raw);
@@ -709,6 +820,42 @@ function LoadingRows({ cols }: { cols: number }) {
   );
 }
 
+// ─── Pagination Component ─────────────────────────────────────────────────────
+
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-center gap-2 mt-4">
+      <button
+        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+        disabled={currentPage === 1}
+        className="p-2 rounded-md border border-border hover:border-primary disabled:opacity-40 transition"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <span className="text-xs text-muted-foreground">
+        Page {currentPage} of {totalPages}
+      </span>
+      <button
+        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+        disabled={currentPage === totalPages}
+        className="p-2 rounded-md border border-border hover:border-primary disabled:opacity-40 transition"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
 function Overview() {
@@ -716,31 +863,41 @@ function Overview() {
   const { registrations, loading: regLoading } = useRegistrations();
   const { members, loading: usersLoading } = useUsers();
   const [pendingOrders, setPendingOrders] = useState(0);
+  
   useEffect(() => {
+    let isMounted = true;
     const unsub = onSnapshot(collection(db, "orders"), (snap) => {
-      setPendingOrders(snap.docs.filter((d) => !d.data().batched).length);
+      if (isMounted) {
+        setPendingOrders(snap.docs.filter((d) => !d.data().batched).length);
+      }
     });
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   const [pendingAdverts, setPendingAdverts] = useState(0);
   useEffect(() => {
-    const unsub = subscribeToAdvertisements((rows) =>
-      setPendingAdverts(rows.filter((a) => a.status === "pending").length),
-    );
-    return () => unsub();
+    let isMounted = true;
+    const unsub = subscribeToAdvertisements((rows) => {
+      if (isMounted) {
+        setPendingAdverts(rows.filter((a) => a.status === "pending").length);
+      }
+    });
+    return () => {
+      isMounted = false;
+      unsub?.();
+    };
   }, []);
 
-  const checkedIn = registrations.filter((r) => r.checkedInAt).length;
-
-  // Only count upcoming events in the stat
   const today = todayStr();
   const upcomingEvents = allEvents.filter((e) => e.date >= today);
 
-  // Show recently joined users (accounts), not event registrations
   const recentUsers = [...members]
     .sort((a, b) => new Date(b.joined ?? 0).getTime() - new Date(a.joined ?? 0).getTime())
     .slice(0, 6);
+  
   const tierCounts = (["Pink", "Silver", "Gold", "Platinum"] as Tier[]).reduce<
     Record<Tier, number>
   >(
@@ -776,7 +933,7 @@ function Overview() {
         </div>
       )}
 
-            {pendingAdverts > 0 && (
+      {pendingAdverts > 0 && (
         <div className="rounded-2xl border border-border bg-card p-5 flex items-center gap-3">
           <Megaphone className="text-primary" size={20} />
           <div className="font-semibold">
@@ -842,8 +999,6 @@ function Overview() {
   );
 }
 
-
-
 // ─── Events Admin ─────────────────────────────────────────────────────────────
 
 function EventsAdmin() {
@@ -854,6 +1009,7 @@ function EventsAdmin() {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
 
   const blank: Omit<Event, "id" | "attendees"> = {
     title: "",
@@ -864,26 +1020,56 @@ function EventsAdmin() {
     description: "",
     image: "",
     membersOnly: false,
-    distanceKm: 5,
+    distanceKm: 0,
   };
 
+  const activeEventIds = new Set(allEvents.map((e) => e.id));
+
+  useEffect(() => {
+    if (selectedEventId && !activeEventIds.has(selectedEventId)) {
+      setSelectedEventId("");
+    }
+  }, [selectedEventId, activeEventIds]);
+
   function exportExcel() {
-    const rows = registrations.map((r) => {
-      const e = allEvents.find((x) => x.id === r.eventId);
-      return {
-        Event: e?.title ?? r.eventId,
-        Date: e?.date ?? "",
-        Attendee: r.name,
-        Contact: r.contact ?? "",
-        Emergency: r.emergency ?? "",
-        Type: r.openRunner ? "Open" : (r.tier ?? "Member"),
-        "Checked In": r.checkedInAt ? "Yes" : "No",
-      };
-    });
+    const rows = selectedEventId
+      ? (() => {
+          const selectedEvent = allEvents.find((e) => e.id === selectedEventId);
+          if (!selectedEvent) return [];
+          return registrations
+            .filter((r) => r.eventId === selectedEventId)
+            .map((r) => ({
+              Event: selectedEvent.title,
+              Date: selectedEvent.date,
+              Attendee: r.name,
+              Contact: r.contact ?? "",
+              Emergency: r.emergency ?? "",
+              Type: r.openRunner ? "Open" : (r.tier ?? "Member"),
+              "Checked In": r.checkedInAt ? "Yes" : "No",
+            }));
+        })()
+      : registrations
+          .filter((r) => activeEventIds.has(r.eventId))
+          .map((r) => {
+            const event = allEvents.find((x) => x.id === r.eventId);
+            return {
+              Event: event?.title ?? r.eventId,
+              Date: event?.date ?? "",
+              Attendee: r.name,
+              Contact: r.contact ?? "",
+              Emergency: r.emergency ?? "",
+              Type: r.openRunner ? "Open" : (r.tier ?? "Member"),
+              "Checked In": r.checkedInAt ? "Yes" : "No",
+            };
+          });
+
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Sign-ups");
-    XLSX.writeFile(wb, "event-signups.xlsx");
+    const sheetName = selectedEventId
+      ? allEvents.find((e) => e.id === selectedEventId)?.title || "event-signups"
+      : "event-signups";
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, `${sheetName.replace(/\s+/g, "-").toLowerCase()}-signups.xlsx`);
   }
 
   const today = todayStr();
@@ -908,7 +1094,6 @@ function EventsAdmin() {
         createEvent({ ...data, id } as any);
         toast.success("Event created — live on site now.");
 
-        // Notify users about the new event
         try {
           await createNotification({
             title: "New event added",
@@ -918,7 +1103,6 @@ function EventsAdmin() {
           });
         } catch (notifErr) {
           console.error("Failed to send notification:", notifErr);
-          // Don't block the success flow if notification fails
         }
       }
     } catch (err) {
@@ -954,6 +1138,26 @@ function EventsAdmin() {
         >
           {showPast ? "Hide past events" : `Show past events (${past.length})`}
         </button>
+
+{/* ✅ ADD THIS ENTIRE SECTION BELOW: */}
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          Export:
+        </label>
+        <select
+          value={selectedEventId}
+          onChange={(e) => setSelectedEventId(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+        >
+          <option value="">All events</option>
+          {allEvents.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.title} ({new Date(e.date + "T12:00:00").toDateString()})
+            </option>
+          ))}
+        </select>
+      </div>
+
         <div className="flex gap-2">
           <button
             onClick={exportExcel}
@@ -1058,6 +1262,18 @@ function EventRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+const filteredRegs = search.trim()
+    ? eventRegs.filter((r) => {
+        const q = search.trim().toLowerCase();
+        return (
+          r.name?.toLowerCase().includes(q) ||
+          r.contact?.toLowerCase().includes(q) ||
+          r.emergency?.toLowerCase().includes(q)
+        );
+      })
+    : eventRegs;
 
   async function handleManualCheckIn(regId: string) {
     setCheckingIn(regId);
@@ -1082,9 +1298,15 @@ function EventRow({
       >
         <td className="p-4 font-medium">
           <div className="flex items-center gap-3">
-            {e.image && (
-              <img src={e.image} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
-            )}
+{e.image && (
+  <img 
+    src={e.image} 
+    alt="" 
+    className="w-10 h-10 rounded-lg object-cover shrink-0"
+    loading="lazy"
+    decoding="async"
+  />
+)}
             <span>
               {e.title}
               {isPast && (
@@ -1140,11 +1362,37 @@ function EventRow({
       {expanded && (
         <tr className="bg-secondary/20">
           <td colSpan={7} className="px-6 py-4">
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
-              Sign-ups ({count})
+            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Sign-ups ({search.trim() ? `${filteredRegs.length} of ${count}` : count})
+              </div>
+              {count > 0 && (
+                <div
+                  className="relative w-full sm:w-56"
+                  onClick={(ev) => ev.stopPropagation()}
+                >
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(ev) => setSearch(ev.target.value)}
+                    placeholder="Search sign-ups…"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-1.5 pr-7 text-xs outline-none focus:border-primary"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             {count === 0 ? (
               <p className="text-xs text-muted-foreground">No one signed up yet.</p>
+            ) : filteredRegs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No sign-ups match "{search}".</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs min-w-[560px]">
@@ -1158,7 +1406,7 @@ function EventRow({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
-                    {eventRegs.map((r) => (
+                    {filteredRegs.map((r) => (
                       <tr key={r.id}>
                         <td className="py-2 pr-6 font-medium">{r.name}</td>
                         <td className="py-2 pr-6 text-muted-foreground">{r.contact || "—"}</td>
@@ -1226,8 +1474,13 @@ function EventModal({
     ...initial,
     imageOrientation:
       (initial as any).imageOrientation ?? ("landscape" as "landscape" | "portrait"),
+    distanceDisplay:
+      (initial as any).distanceDisplay ??
+      (initial.distanceKm ? formatDistanceKm(initial.distanceKm) : ""),
   });
-  const [distanceInput, setDistanceInput] = useState(() => formatDistanceKm(initial.distanceKm));
+  const [distanceInput, setDistanceInput] = useState(
+    () => (initial as any).distanceDisplay ?? (initial.distanceKm ? formatDistanceKm(initial.distanceKm) : ""),
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1266,6 +1519,15 @@ function EventModal({
       if (fileRef.current) fileRef.current.value = "";
     }
   }
+
+  // ✅ ADD THIS CLEANUP
+useEffect(() => {
+  return () => {
+    // Cleanup when modal closes
+    setUploading(false);
+    setUploadPct(0);
+  };
+}, []);
 
   const busy = uploading || saving;
 
@@ -1320,23 +1582,40 @@ function EventModal({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <In
-              label="Distance (km)"
-              type="text"
-              inputMode="decimal"
-              pattern="[0-9]*[.,]?[0-9]*"
-              value={distanceInput}
-              onChange={(v) => {
-                const sanitized = v.replace(/[^0-9,.-]/g, "");
-                const displayValue = sanitized.replace(/\./g, ",");
-                const normalized = sanitized.replace(/,/g, ".");
-                const parsed = Number(normalized || 0);
+<In
+  label="Distance (km)"
+  type="text"
+  inputMode="decimal"
+  pattern="[0-9]*[.,]?[0-9]{0,3}"
+  value={distanceInput}
+  onChange={(v) => {
+    const sanitized = v.replace(/[^0-9,.]/g, "");
 
-                setDistanceInput(displayValue);
-                setF((prev) => ({ ...prev, distanceKm: Number.isFinite(parsed) ? parsed : 0 }));
-              }}
-              required
-            />
+    if (sanitized === "") {
+      setDistanceInput("");
+      setF((prev) => ({ ...prev, distanceKm: 0, distanceDisplay: "" }));
+      return;
+    }
+
+    // Split on decimal/comma separator and limit decimals to 3
+    const parts = sanitized.split(/[,.]/);
+    const integerPart = parts[0]; // don't force "0" — let it stay empty while typing
+    const decimalPart = parts[1] !== undefined ? parts[1].slice(0, 3) : ""; // limit to 3 decimals
+
+    const hasSeparator = sanitized.includes(",") || sanitized.includes(".");
+    const displayValue = hasSeparator ? `${integerPart},${decimalPart}` : integerPart;
+    const normalized = hasSeparator ? `${integerPart || "0"}.${decimalPart}` : integerPart;
+    const parsed = Number(normalized || 0);
+
+    setDistanceInput(displayValue);
+    setF((prev) => ({
+      ...prev,
+      distanceKm: Number.isFinite(parsed) ? parsed : 0,
+      distanceDisplay: displayValue,
+    }));
+  }}
+  required
+/>
           </div>
 
           <In
@@ -1363,9 +1642,7 @@ function EventModal({
             />
           </label>
 
-          {/* ── Cover image ── */}
           <div className="space-y-3">
-            {/* Header row: label + orientation toggle */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 Cover image
@@ -1388,7 +1665,6 @@ function EventModal({
               </div>
             </div>
 
-            {/* Upload button row */}
             <div className="flex items-center gap-3 flex-wrap">
               <button
                 type="button"
@@ -1415,7 +1691,6 @@ function EventModal({
               )}
             </div>
 
-            {/* Hidden file input */}
             <input
               ref={fileRef}
               type="file"
@@ -1424,7 +1699,6 @@ function EventModal({
               onChange={handleFileChange}
             />
 
-            {/* Upload progress bar */}
             {uploading && (
               <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
                 <div
@@ -1434,7 +1708,6 @@ function EventModal({
               </div>
             )}
 
-            {/* Image preview — height reflects orientation */}
             {f.image && !uploading && (
               <div
                 className="rounded-xl overflow-hidden bg-secondary border border-border"
@@ -1449,7 +1722,6 @@ function EventModal({
               </div>
             )}
 
-            {/* URL paste fallback — only shown when no image yet */}
             {!f.image && !uploading && (
               <In
                 label="Or paste image URL"
@@ -1458,7 +1730,6 @@ function EventModal({
               />
             )}
           </div>
-          {/* ── End cover image ── */}
 
           <button
             type="submit"
@@ -1481,66 +1752,14 @@ function EventModal({
   );
 }
 
-function BackfillWaiverButton({
-  members,
-  openRunners,
-}: {
-  members: FSMember[];
-  openRunners: FSMember[];
-}) {
-  const [running, setRunning] = useState(false);
-
-  const needsBackfill = [...members, ...openRunners].filter((u) => !(u as any).waiverAccepted);
-
-  if (needsBackfill.length === 0) return null;
-
-  async function run() {
-    if (
-      !confirm(
-        `Backfill waiver for ${needsBackfill.length} existing user${needsBackfill.length !== 1 ? "s" : ""}?\n\nThis marks all existing users as having accepted the waiver with today's date. Run this once to fix users who registered before the waiver was tracked.`,
-      )
-    )
-      return;
-
-    setRunning(true);
-    const now = new Date().toISOString();
-    try {
-      await Promise.all(
-        needsBackfill.map((u) =>
-          updateDoc(doc(db, "users", u.id), {
-            waiverAccepted: true,
-            waiverAcceptedAt: now,
-          }),
-        ),
-      );
-      toast.success(
-        `Waiver backfilled for ${needsBackfill.length} user${needsBackfill.length !== 1 ? "s" : ""}.`,
-      );
-    } catch {
-      toast.error("Backfill failed. Check Firestore permissions.");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <button
-      onClick={run}
-      disabled={running}
-      className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs uppercase tracking-widest text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-40 whitespace-nowrap"
-    >
-      {running ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
-      {running ? "Backfilling…" : `Backfill waiver (${needsBackfill.length})`}
-    </button>
-  );
-}
-// ─── Members Admin ────────────────────────────────────────────────────────────
+// ─── Members Admin (with pagination) ───────────────────────────────────────
 
 function MembersAdmin() {
   const { members, loading } = useUsers();
   const { registrations, loading: regLoading } = useRegistrations();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingTier, setUpdatingTier] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const allEvents = useEvents();
 
   async function handleTierChange(memberId: string, newTier: Tier) {
@@ -1579,34 +1798,35 @@ function MembersAdmin() {
       "Events Attended": raceCount(m.id),
       Tier: m.tier,
       Role: "Member",
-      "Waiver Accepted": (m as any).waiverAccepted ? "Yes" : "No", // ← add
-      "Waiver Date": (m as any).waiverAcceptedAt?.slice(0, 10) ?? "", // ← add
+      "Waiver Accepted": (m as any).waiverAccepted ? "Yes" : "No",
+      "Waiver Date": (m as any).waiverAcceptedAt?.slice(0, 10) ?? "",
     }));
 
     const ws = XLSX.utils.json_to_sheet([...memberRows]);
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Members");
     XLSX.writeFile(wb, "members.xlsx");
   }
 
+  const totalPages = Math.ceil(members.length / ITEMS_PER_PAGE);
+  const paginatedMembers = members.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   return (
     <div className="space-y-6">
-      {/* ── Club Members ── */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="bg-secondary/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Club Members ({loading ? "…" : members.length})
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <BackfillWaiverButton members={members} openRunners={[]} />
-            <button
-              onClick={exportMembersExcel}
-              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs uppercase tracking-widest hover:border-primary active:scale-95 transition-all whitespace-nowrap"
-            >
-              <Download size={13} /> Export Excel
-            </button>
-          </div>
+          <button
+            onClick={exportMembersExcel}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs uppercase tracking-widest hover:border-primary active:scale-95 transition-all whitespace-nowrap"
+          >
+            <Download size={13} /> Export Excel
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[920px]">
@@ -1626,17 +1846,16 @@ function MembersAdmin() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <LoadingRows cols={9} />
-              ) : members.length === 0 ? (
+              ) : paginatedMembers.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="p-8 text-center text-sm text-muted-foreground">
                     No members yet.
                   </td>
                 </tr>
               ) : (
-                members.map((m) => (
-                  <>
+                paginatedMembers.map((m) => (
+                  <React.Fragment key={m.id}>
                     <tr
-                      key={m.id}
                       className="hover:bg-secondary/30 cursor-pointer"
                       onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                     >
@@ -1731,13 +1950,14 @@ function MembersAdmin() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 ))
               )}
             </tbody>
           </table>
         </div>
       </div>
+      <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
     </div>
   );
 }
@@ -1746,19 +1966,23 @@ function MembersAdmin() {
 
 const REWARD_TIERS: Array<Tier> = ["Pink", "Silver", "Gold", "Platinum"];
 
-// Replace the entire RewardsAdmin function with this:
 function RewardsAdmin() {
   const { createReward, updateReward, deleteReward } = useStore();
   const [firestoreRewards, setFirestoreRewards] = useState<Reward[]>([]);
   const [editing, setEditing] = useState<Reward | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Live listener from Firestore
   useEffect(() => {
+    let isMounted = true;
     const unsub = onSnapshot(collection(db, "rewards"), (snap) => {
-      setFirestoreRewards(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Reward[]);
+      if (isMounted) {
+        setFirestoreRewards(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Reward[]);
+      }
     });
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   const blank: Omit<Reward, "id"> = { tier: "Pink", title: "", description: "", expiresInDays: 30 };
@@ -1784,7 +2008,6 @@ function RewardsAdmin() {
 
   async function handleSave(data: Omit<Reward, "id">) {
     if (editing) {
-      // Update in Firestore
       try {
         await updateDoc(doc(db, "rewards", editing.id), data as any);
         toast.success("Reward updated.");
@@ -1792,7 +2015,6 @@ function RewardsAdmin() {
         toast.error("Could not update reward.");
       }
     } else {
-      // Create in Firestore
       try {
         await addDoc(collection(db, "rewards"), { ...data, createdAt: new Date().toISOString() });
         toast.success("Reward created.");
@@ -1829,6 +2051,7 @@ function RewardsAdmin() {
       toast.error("Could not delete reward.");
     }
   }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
@@ -1878,11 +2101,11 @@ function RewardsAdmin() {
                                 Expired
                               </span>
                             )}
-                          </div>{" "}
+                          </div>
                           <p className="mt-1.5 text-sm text-muted-foreground line-clamp-2">
                             {r.description}
                           </p>
-<div
+                          <div
                             className={`mt-3 text-[10px] uppercase tracking-widest ${
                               isExpired(r)
                                 ? "text-muted-foreground"
@@ -2035,9 +2258,11 @@ function OrdersAdmin() {
   const [sendingBatch, setSendingBatch] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     const unsub = onSnapshot(
       collection(db, "orders"),
       (snap) => {
+        if (!isMounted) return;
         const rows = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
           .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
@@ -2045,11 +2270,15 @@ function OrdersAdmin() {
         setLoading(false);
       },
       (err) => {
+        if (!isMounted) return;
         console.error("orders onSnapshot error:", err);
         setLoading(false);
       },
     );
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   const unbatched = orders.filter((o) => !o.batched);
@@ -2092,7 +2321,7 @@ function OrdersAdmin() {
     }
   }
 
-async function clearAll() {
+  async function clearAll() {
     if (!confirm("Clear all order history? This cannot be undone.")) return;
     try {
       await Promise.all(orders.map((o) => deleteDoc(doc(db, "orders", o.id))));
@@ -2102,7 +2331,7 @@ async function clearAll() {
     }
   }
 
-async function handleDeleteOrder(orderId: string, orderNumber: string, name: string) {
+  async function handleDeleteOrder(orderId: string, orderNumber: string, name: string) {
     if (
       !confirm(
         `Delete order ${orderNumber || "—"} from ${name}?\n\nUse this if payment was never received. This cannot be undone.`,
@@ -2133,7 +2362,7 @@ async function handleDeleteOrder(orderId: string, orderNumber: string, name: str
     XLSX.writeFile(wb, "merch-orders.xlsx");
   }
 
-function OrderTable({ rows, dimmed }: { rows: any[]; dimmed?: boolean }) {
+  function OrderTable({ rows, dimmed }: { rows: any[]; dimmed?: boolean }) {
     return (
       <div
         className={`rounded-2xl border border-border bg-card overflow-hidden ${dimmed ? "opacity-60" : ""}`}
@@ -2192,7 +2421,6 @@ function OrderTable({ rows, dimmed }: { rows: any[]; dimmed?: boolean }) {
 
   return (
     <div className="space-y-6">
-      {/* Pending */}
       <div className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -2254,7 +2482,6 @@ function OrderTable({ rows, dimmed }: { rows: any[]; dimmed?: boolean }) {
         )}
       </div>
 
-      {/* Sent */}
       {batchedOrders.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -2343,11 +2570,17 @@ function SponsorsAdmin() {
   const [editing, setEditing] = useState<Sponsor | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const unsub = subscribeToSponsors((s) => {
-      setSponsors(s);
-      setLoading(false);
+      if (isMounted) {
+        setSponsors(s);
+        setLoading(false);
+      }
     });
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub?.();
+    };
   }, []);
 
   async function handleDelete(s: Sponsor) {
@@ -2384,45 +2617,47 @@ function SponsorsAdmin() {
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
-              <tr>
-                <th className="text-left p-4">Logo</th>
-                <th className="text-left p-4">Name</th>
-                <th className="text-left p-4">Website</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {sponsors.map((s) => (
-                <tr key={s.id} className="hover:bg-secondary/30">
-                  <td className="p-4">
-                    <div className="w-16 h-12 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-border">
-                      <img src={s.logoUrl} alt={s.name} className="max-w-full max-h-full object-contain" />
-                    </div>
-                  </td>
-                  <td className="p-4 font-medium">{s.name}</td>
-                  <td className="p-4 text-muted-foreground truncate max-w-[220px]">{s.websiteUrl}</td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => setEditing(s)}
-                        className="rounded-md border border-border p-2 hover:border-primary transition active:scale-90"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(s)}
-                        className="rounded-md border border-border p-2 hover:border-destructive hover:text-destructive transition active:scale-90"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <tr>
+                  <th className="text-left p-4">Logo</th>
+                  <th className="text-left p-4">Name</th>
+                  <th className="text-left p-4">Website</th>
+                  <th className="p-4 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {sponsors.map((s) => (
+                  <tr key={s.id} className="hover:bg-secondary/30">
+                    <td className="p-4">
+                      <div className="w-16 h-12 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-border">
+                        <img src={s.logoUrl} alt={s.name} className="max-w-full max-h-full object-contain" />
+                      </div>
+                    </td>
+                    <td className="p-4 font-medium">{s.name}</td>
+                    <td className="p-4 text-muted-foreground truncate max-w-[220px]">{s.websiteUrl}</td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setEditing(s)}
+                          className="rounded-md border border-border p-2 hover:border-primary transition active:scale-90"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(s)}
+                          className="rounded-md border border-border p-2 hover:border-destructive hover:text-destructive transition active:scale-90"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -2613,293 +2848,72 @@ function SponsorModal({
   );
 }
 
-function AdvertsAdmin() {
-  const [ads, setAds] = useState<Advertisement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const unsub = subscribeToAdvertisements((rows) => {
-      setAds(rows);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  const pending = ads.filter((a) => a.status === "pending");
-  const approved = ads.filter((a) => a.status === "approved");
-  const rejected = ads.filter((a) => a.status === "rejected");
-
-  async function handleApprove(a: Advertisement) {
-    if (
-      !confirm(
-        `Approve "${a.businessName}"? Only do this once payment (R${a.price}, ref ${a.orderNumber}) has been received — this makes the advert live on the homepage immediately.`,
-      )
-    )
-      return;
-    setBusyId(a.id);
-    try {
-      await updateAdvertisement(a.id, { status: "approved", enabled: true });
-      toast.success("Advert approved and live.");
-    } catch {
-      toast.error("Could not approve advert.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReject(a: Advertisement) {
-    if (!confirm(`Reject "${a.businessName}"'s application?`)) return;
-    setBusyId(a.id);
-    try {
-      await updateAdvertisement(a.id, { status: "rejected", enabled: false });
-      toast.success("Application rejected.");
-    } catch {
-      toast.error("Could not update advert.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleToggleEnabled(a: Advertisement) {
-    setBusyId(a.id);
-    try {
-      await updateAdvertisement(a.id, { enabled: !a.enabled });
-      toast.success(a.enabled ? "Advert hidden from homepage." : "Advert live on homepage.");
-    } catch {
-      toast.error("Could not update advert.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleDelete(a: Advertisement) {
-    if (!confirm(`Delete "${a.businessName}"'s advert? This cannot be undone.`)) return;
-    setBusyId(a.id);
-    try {
-      await deleteAdvertisement(a.id);
-      toast.success("Advert deleted.");
-    } catch {
-      toast.error("Could not delete advert.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function Row({ a }: { a: Advertisement }) {
-    return (
-      <tr className="hover:bg-secondary/30">
-        <td className="p-4">
-          <div className="w-14 h-12 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-border">
-            <img src={a.logoUrl} alt={a.businessName} className="max-w-full max-h-full object-contain" />
-          </div>
-        </td>
-        <td className="p-4">
-          <div className="font-mono text-[10px] text-primary">{a.orderNumber}</div>
-          <div className="font-medium">{a.businessName}</div>
-          <div className="text-xs text-muted-foreground truncate max-w-[200px]">{a.slogan}</div>
-        </td>
-        <td className="p-4 text-muted-foreground truncate max-w-[180px]">
-          <a href={a.websiteUrl} target="_blank" rel="noreferrer" className="hover:text-primary underline">
-            {a.websiteUrl}
-          </a>
-        </td>
-        <td className="p-4 text-muted-foreground">
-          <div>{a.contactName}</div>
-          <div className="text-xs">{a.contactEmail}</div>
-          <div className="text-xs">{a.contactPhone}</div>
-        </td>
-        <td className="p-4">
-          <span
-            className={`text-[10px] uppercase tracking-widest font-semibold ${a.isMember ? "text-primary" : "text-muted-foreground"}`}
-          >
-            {a.isMember ? "Member" : "Guest"}
-          </span>
-        </td>
-        <td className="p-4 font-mono text-xs">R{a.price}/mo</td>
-        <td className="p-4">
-          {a.status === "pending" && (
-            <span className="text-[10px] uppercase tracking-widest text-amber-500 font-semibold">
-              Pending
-            </span>
-          )}
-          {a.status === "approved" && (
-            <span
-              className={`text-[10px] uppercase tracking-widest font-semibold ${a.enabled ? "text-primary" : "text-muted-foreground"}`}
-            >
-              {a.enabled ? "Live" : "Approved · Hidden"}
-            </span>
-          )}
-          {a.status === "rejected" && (
-            <span className="text-[10px] uppercase tracking-widest text-destructive font-semibold">
-              Rejected
-            </span>
-          )}
-        </td>
-        <td className="p-4 text-right">
-          <div className="flex justify-end gap-2 flex-wrap">
-            {a.status === "pending" && (
-              <>
-                <button
-                  onClick={() => handleApprove(a)}
-                  disabled={busyId === a.id}
-                  title="Approve (payment received)"
-                  className="rounded-md border border-primary/40 text-primary p-2 hover:bg-primary/10 transition active:scale-90 disabled:opacity-40"
-                >
-                  <Check size={13} />
-                </button>
-                <button
-                  onClick={() => handleReject(a)}
-                  disabled={busyId === a.id}
-                  title="Reject"
-                  className="rounded-md border border-border p-2 hover:border-destructive hover:text-destructive transition active:scale-90 disabled:opacity-40"
-                >
-                  <X size={13} />
-                </button>
-              </>
-            )}
-            {a.status === "approved" && (
-              <button
-                onClick={() => handleToggleEnabled(a)}
-                disabled={busyId === a.id}
-                title={a.enabled ? "Disable" : "Enable"}
-                className="rounded-md border border-border p-2 hover:border-primary transition active:scale-90 disabled:opacity-40"
-              >
-                {a.enabled ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-            )}
-            <button
-              onClick={() => handleDelete(a)}
-              disabled={busyId === a.id}
-              title="Delete"
-              className="rounded-md border border-border p-2 hover:border-destructive hover:text-destructive transition active:scale-90 disabled:opacity-40"
-            >
-              <Trash2 size={13} />
-            </button>
-          </div>
-        </td>
-      </tr>
-    );
-  }
-
-  function Table({ rows, empty }: { rows: Advertisement[]; empty: string }) {
-    if (rows.length === 0) {
-      return (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center text-sm text-muted-foreground">
-          {empty}
-        </div>
-      );
-    }
-    return (
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[960px]">
-            <thead className="bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
-              <tr>
-                <th className="text-left p-4">Logo</th>
-                <th className="text-left p-4">Ref / Business</th>
-                <th className="text-left p-4">Website</th>
-                <th className="text-left p-4">Contact</th>
-                <th className="text-left p-4">Type</th>
-                <th className="text-left p-4">Price</th>
-                <th className="text-left p-4">Status</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((a) => (
-                <Row key={a.id} a={a} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <div className="display text-lg mb-1">Pending applications ({loading ? "…" : pending.length})</div>
-        <p className="text-xs text-muted-foreground mb-3">
-          Approve only after you've confirmed payment against the reference number.
-        </p>
-        {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-            <Loader2 size={14} className="animate-spin" /> Loading…
-          </div>
-        ) : (
-          <Table rows={pending} empty="No pending applications." />
-        )}
-      </div>
-
-      <div>
-        <div className="display text-lg mb-3">Approved ({approved.length})</div>
-        <Table rows={approved} empty="No approved adverts yet." />
-      </div>
-
-      {rejected.length > 0 && (
-        <div>
-          <div className="display text-lg mb-3">Rejected ({rejected.length})</div>
-          <Table rows={rejected} empty="" />
-        </div>
-      )}
-    </div>
-  );
-}
-
 function QRCodeCard({
   qr,
 }: {
   qr: { id: string; label: string; value: string; description: string; color: string };
 }) {
-  const [copied, setCopied] = useState(false);
-  const [ready, setReady] = useState(false);
+const [copied, setCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const qrCodeInstanceRef = useRef<any>(null);
   const DISPLAY_SIZE = 220;
   const EXPORT_SIZE = 1000;
 
-  // Load QRCode.js from CDN once, then render
-  useEffect(() => {
-    function renderQR() {
-      const container = containerRef.current;
-      if (!container) return;
+useEffect(() => {
+  function renderQR() {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // CLEAR OLD QR FIRST
+    if (qrCodeInstanceRef.current) {
       container.innerHTML = "";
-      container.style.width = `${DISPLAY_SIZE}px`;
-      container.style.height = `${DISPLAY_SIZE}px`;
-      container.style.display = "flex";
-      container.style.alignItems = "center";
-      container.style.justifyContent = "center";
-      // @ts-ignore
-      new window.QRCode(container, {
-        text: qr.value,
-        width: EXPORT_SIZE,
-        height: EXPORT_SIZE,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        // @ts-ignore
-        correctLevel: window.QRCode?.CorrectLevel?.H ?? 3,
-      });
-      const canvas = container.querySelector("canvas") as HTMLCanvasElement | null;
-      if (canvas) {
-        canvas.style.width = `${DISPLAY_SIZE}px`;
-        canvas.style.height = `${DISPLAY_SIZE}px`;
-        canvas.style.display = "block";
-      }
-      setReady(true);
     }
 
+    container.style.width = `${DISPLAY_SIZE}px`;
+    container.style.height = `${DISPLAY_SIZE}px`;
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "center";
+
     // @ts-ignore
-    if (window.QRCode) {
-      renderQR();
-    } else {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
-      script.onload = renderQR;
-      document.head.appendChild(script);
+    const qrInstance = new window.QRCode(container, {
+      text: qr.value,
+      width: EXPORT_SIZE,
+      height: EXPORT_SIZE,
+      colorDark: "#000000",
+      colorLight: "#ffffff",
+      // @ts-ignore
+      correctLevel: window.QRCode?.CorrectLevel?.H ?? 3,
+    });
+
+    qrCodeInstanceRef.current = qrInstance;
+
+    const canvas = container.querySelector("canvas") as HTMLCanvasElement | null;
+    if (canvas) {
+      canvas.style.width = `${DISPLAY_SIZE}px`;
+      canvas.style.height = `${DISPLAY_SIZE}px`;
+      canvas.style.display = "block";
     }
-  }, [qr.value]);
+  }
+
+  // @ts-ignore
+  if (window.QRCode) {
+    renderQR();
+  } else {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+    script.onload = renderQR;
+    document.head.appendChild(script);
+  }
+
+  // ✅ CLEANUP ON UNMOUNT
+  return () => {
+    if (containerRef.current) {
+      containerRef.current.innerHTML = "";
+    }
+    qrCodeInstanceRef.current = null;
+  };
+}, [qr.value]);
 
   function getCanvas(): HTMLCanvasElement | null {
     return containerRef.current?.querySelector("canvas") ?? null;
@@ -2970,7 +2984,6 @@ function QRCodeCard({
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 flex flex-col items-center gap-5">
-      {/* Label */}
       <div className="text-center">
         <div className="display text-lg" style={{ color: qr.color }}>
           {qr.label}
@@ -2978,12 +2991,10 @@ function QRCodeCard({
         <p className="text-xs text-muted-foreground mt-1">{qr.description}</p>
       </div>
 
-      {/* QR code rendered by QRCode.js */}
       <div className="rounded-xl overflow-hidden border border-border bg-white p-3">
         <div ref={containerRef} style={{ width: 220, height: 220 }} />
       </div>
 
-      {/* Code value + copy */}
       <div className="w-full rounded-lg bg-secondary/40 px-4 py-2.5 flex items-center justify-between gap-3">
         <code className="text-xs font-mono text-foreground">{qr.value}</code>
         <button
@@ -2994,7 +3005,6 @@ function QRCodeCard({
         </button>
       </div>
 
-      {/* Download + Print */}
       <div className="flex gap-2 w-full">
         <button
           onClick={download}

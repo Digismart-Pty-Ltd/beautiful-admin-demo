@@ -1,7 +1,8 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "@/lib/store";
 import { formatDistanceKm } from "@/lib/utils";
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -19,6 +20,8 @@ import {
   ShieldCheck,
   LogIn,
 } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
+import type { CarouselApi } from "@/components/ui/carousel";
 import type { Event } from "@/lib/demo-data";
 import { subscribeToEvents } from "@/lib/eventService";
 import {
@@ -33,6 +36,7 @@ import {
   getDocs,
   serverTimestamp,
   onSnapshot,
+  limit,
 } from "firebase/firestore";
 import { Html5Qrcode } from "html5-qrcode";
 import { db } from "@/lib/firebase";
@@ -44,6 +48,7 @@ export default function Events() {
   const [searchParams] = useSearchParams();
   const checkinEventId = searchParams.get("checkin");
   const scrollRef = useRef<Record<string, HTMLDivElement | null>>({});
+  const [visibleIndex, setVisibleIndex] = useState(0);
 
   useEffect(() => {
     document.title = "Events — Waven Harper Fitness";
@@ -58,15 +63,28 @@ export default function Events() {
     }
   }, [checkinEventId, state.events]);
 
+  // Events are already kept in sync by the global StoreProvider subscription.
+  // No local listener here to avoid duplicate Firestore listen channels.
+
   useEffect(() => {
-    const unsubscribe = subscribeToEvents((events) => {
-      setEvents(events);
-    });
-    return () => unsubscribe();
-  }, [setEvents]);
+    return () => {
+      document.querySelectorAll('[id^="checkin-reader-"], .html5-qrcode').forEach((node) => {
+        if (node instanceof Element) {
+          node.querySelectorAll("video").forEach((video) => {
+            const stream = video.srcObject as MediaStream | null;
+            stream?.getTracks().forEach((track) => track.stop());
+            video.srcObject = null;
+          });
+        }
+        node.remove();
+      });
+    };
+  }, []);
 
   const todayStr = new Date().toLocaleDateString("en-CA");
   const upcomingEvents = state.events.filter((e) => e.date >= todayStr);
+
+  
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,46 +96,60 @@ export default function Events() {
         </p>
       </section>
 
-      <section className="relative pb-10">
-        {upcomingEvents.length === 0 ? (
+<section className="relative pb-10 min-h-screen">
+          {upcomingEvents.length === 0 ? (
           <div className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 py-20 text-center text-muted-foreground text-sm">
             No upcoming events scheduled. Check back soon.
           </div>
         ) : (
-          <div
-            className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
-            style={{ scrollbarWidth: "none" }}
-          >
-            {upcomingEvents.map((e, i) => (
-              <div
-                key={e.id}
-                ref={(el) => {
-                  scrollRef.current[e.id] = el;
-                }}
-                className={`snap-center shrink-0 w-screen min-h-[calc(100vh-140px)] px-4 md:px-12 flex flex-col justify-start pt-2 pb-10 ${
-                  checkinEventId === e.id ? "ring-2 ring-primary/40 rounded-3xl" : ""
-                }`}
-              >
-                <div className="flex items-center justify-center gap-1.5 mb-4">
-                  {upcomingEvents.map((_, j) => (
-                    <span
-                      key={j}
-                      className={`block rounded-full transition-all ${
-                        j === i ? "w-5 h-1.5 bg-primary" : "w-1.5 h-1.5 bg-border"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="mx-auto w-full max-w-xl">
-                  <EventCard e={e} />
-                </div>
-                {upcomingEvents.length > 1 && (
-                  <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground mt-5">
-                    {i + 1} / {upcomingEvents.length} — swipe for more
-                  </p>
-                )}
-              </div>
-            ))}
+<div
+  className="relative flex w-full overflow-x-auto snap-x snap-proximity scrollbar-hide"
+  style={{ scrollbarWidth: "none", overscrollBehavior: "auto" }}
+  onScroll={(e) => {
+    const scrollLeft = e.currentTarget.scrollLeft;
+    const width = window.innerWidth;
+    const index = Math.round(scrollLeft / width);
+    setVisibleIndex(index);
+  }}
+>
+{upcomingEvents.map((e, i) => {
+  const isVisible = Math.abs(i - visibleIndex) <= 1; // Load current + adjacent
+  
+  return (
+    <div
+      key={e.id}
+      ref={(el) => {
+        scrollRef.current[e.id] = el;
+      }}
+      className={`snap-center shrink-0 w-screen min-h-[calc(100vh-140px)] px-4 md:px-12 flex flex-col justify-start pt-2 pb-10 ${
+        checkinEventId === e.id ? "ring-2 ring-primary/40 rounded-3xl" : ""
+      }`}
+    >
+      <div className="flex items-center justify-center gap-1.5 mb-4">
+        {upcomingEvents.map((_, j) => (
+          <span
+            key={j}
+            className={`block rounded-full transition-all ${
+              j === i ? "w-5 h-1.5 bg-primary" : "w-1.5 h-1.5 bg-border"
+            }`}
+          />
+        ))}
+      </div>
+      <div className="mx-auto w-full max-w-xl">
+        {isVisible ? (
+          <EventCard e={e} />
+        ) : (
+          <div className="h-96 rounded-3xl bg-secondary/40 animate-pulse" />
+        )}
+      </div>
+      {upcomingEvents.length > 1 && (
+        <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground mt-5">
+          {i + 1} / {upcomingEvents.length} — swipe for more
+        </p>
+      )}
+    </div>
+  );
+})}
           </div>
         )}
       </section>
@@ -132,15 +164,34 @@ function isValidPhone(value: string) {
 }
 function SponsorsBanner() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+  const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
 
   useEffect(() => {
-    const unsub = subscribeToSponsors(setSponsors);
-    return () => unsub();
+    let isMounted = true;
+
+    const unsub = subscribeToSponsors((s) => {
+      if (isMounted) {
+        setSponsors(s);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsub?.();
+    };
   }, []);
 
-  if (sponsors.length === 0) return null;
+  useEffect(() => {
+    if (!carouselApi) return;
 
-  const loopedSponsors = [...sponsors, ...sponsors];
+    const interval = window.setInterval(() => {
+      carouselApi.scrollNext();
+    }, 3500);
+
+    return () => window.clearInterval(interval);
+  }, [carouselApi]);
+
+  if (sponsors.length === 0) return null;
 
   return (
     <section className="mt-24 mb-16">
@@ -149,46 +200,43 @@ function SponsorsBanner() {
         <h2 className="mt-2 display text-3xl md:text-5xl">Our sponsors.</h2>
       </div>
 
-      <div className="relative overflow-hidden py-6 border-y border-border bg-card">
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-16 md:w-32 bg-gradient-to-r from-card to-transparent z-10" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-16 md:w-32 bg-gradient-to-l from-card to-transparent z-10" />
-
-        <div className="flex w-max animate-marquee gap-10 md:gap-16">
-          {loopedSponsors.map((s, i) => (
-            <a
-              key={`${s.id}-${i}`}
-              href={s.websiteUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="shrink-0 flex items-center justify-center h-20 w-40 md:h-24 md:w-48 transition duration-300 hover:scale-110"
-              title={s.name}
-            >
-              <img
-                src={s.logoUrl}
-                alt={s.name}
-                className="max-h-full max-w-full w-auto h-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-              />
-            </a>
-          ))}
-        </div>
-
-        <style>{`
-          @keyframes marquee-scroll {
-            from { transform: translateX(0); }
-            to { transform: translateX(-50%); }
-          }
-          .animate-marquee {
-            animation: marquee-scroll 30s linear infinite;
-          }
-          .animate-marquee:hover {
-            animation-play-state: paused;
-          }
-        `}</style>
+      <div className="mx-auto max-w-6xl px-5 md:px-8 py-10 border-y border-border bg-card relative">
+        <Carousel
+          opts={{ loop: true, align: "start", containScroll: "trimSnaps" }}
+          setApi={setCarouselApi}
+          className="relative"
+        >
+          <CarouselPrevious aria-label="Previous sponsor" className="hidden md:block" />
+          <CarouselContent className="flex touch-pan-x gap-2 px-2 md:px-3">
+            {sponsors.map((s) => (
+              <CarouselItem
+                key={s.id}
+                className="basis-auto min-w-[160px] sm:min-w-[180px] md:min-w-[220px] max-w-[220px] rounded-3xl"
+              >
+                <a
+                  href={s.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="group flex h-28 w-full items-center justify-center overflow-hidden rounded-3xl border border-border bg-background p-4 transition duration-300 hover:shadow-lg"
+                  title={s.name}
+                >
+                  <img
+                    src={s.logoUrl}
+                    alt={s.name}
+                    loading="lazy"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </a>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <CarouselNext aria-label="Next sponsor" className="hidden md:block" />
+        </Carousel>
       </div>
     </section>
   );
 }
-function EventCard({ e }: { e: Event }) {
+const EventCard = React.memo(function EventCard({ e }: { e: Event }) {
   const { currentMember, currentOpen, state } = useStore();
   const { user, loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
@@ -214,28 +262,61 @@ function EventCard({ e }: { e: Event }) {
 
   const currentUser = effectiveMember ?? currentOpen;
   const isLoggedIn = Boolean(user || currentUser);
+useEffect(() => {
+  if (!e.id) return;
+  let isMounted = true;
 
-  useEffect(() => {
-    if (!e.id) return;
-    const q = query(collection(db, "eventRegistrations"), where("eventId", "==", e.id));
-    const unsub = onSnapshot(q, (snap) => {
+  const q = query(
+    collection(db, "eventRegistrations"),
+    where("eventId", "==", e.id),
+    limit(200) // ✅ ADD LIMIT - no need to load all registrations
+  );
+
+  const unsub = onSnapshot(
+    q,
+    (snap) => {
+      if (!isMounted) return; // ✅ Don't update if unmounting
+      
       const regs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       setAttendees(regs);
+      
       if (currentUser?.id) {
         const mine = regs.find((r: any) => r.userId === currentUser.id) ?? null;
         setMyReg(mine);
       }
-    });
-    return () => unsub();
-  }, [e.id, currentUser?.id]);
+    },
+    (err) => {
+      if (!isMounted) return;
+      console.error("Attendees subscription error:", err);
+    }
+  );
+
+  return () => {
+    isMounted = false;
+    unsub();
+  };
+}, [e.id, currentUser?.id]);
 
   const [name, setName] = useState(currentUser?.name ?? "");
   const [contact, setContact] = useState("");
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyNumber, setEmergencyNumber] = useState("");
+
+  // ✅ ADD THIS CLEANUP EFFECT
+useEffect(() => {
+  if (!signupOpen) {
+    setContactError("");
+    setEmergencyNumberError("");
+    setAccepted(false); 
+  }
+}, [signupOpen]);
+  
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [contactError, setContactError] = useState("");
   const [emergencyNumberError, setEmergencyNumberError] = useState("");
+
+
+  
 
   // Keep the name field in sync once we resolve who the user actually is
   // (covers the case where currentUser wasn't known yet on first render).
@@ -244,11 +325,16 @@ function EventCard({ e }: { e: Event }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.name]);
 
-  useEffect(() => {
-    const memberId = effectiveMember?.id;
-    if (!memberId) return;
-    getDoc(doc(db, "users", memberId)).then((snap) => {
-      if (!snap.exists()) return;
+useEffect(() => {
+  const memberId = effectiveMember?.id;
+  if (!memberId) return;
+
+  let isMounted = true;
+
+  getDoc(doc(db, "users", memberId))
+    .then((snap) => {
+      if (!isMounted || !snap.exists()) return; // ✅ Check if still mounted
+      
       const data = snap.data() as any;
       if (data.contact) setContact(data.contact);
       if (data.emergency) {
@@ -257,8 +343,16 @@ function EventCard({ e }: { e: Event }) {
         setEmergencyNumber(parts[1]?.trim() ?? "");
       }
       setProfileLoaded(true);
+    })
+    .catch((err) => {
+      if (!isMounted) return;
+      console.error("Profile fetch error:", err);
     });
-  }, [effectiveMember?.id]);
+
+  return () => {
+    isMounted = false;
+  };
+}, [effectiveMember?.id]);
 
   const [signingUp, setSigningUp] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
@@ -385,6 +479,7 @@ function EventCard({ e }: { e: Event }) {
             src={e.image}
             alt={e.title}
             loading="lazy"
+            decoding="async" 
             className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
           />
         ) : (
@@ -405,7 +500,7 @@ function EventCard({ e }: { e: Event }) {
 
       <div className="p-6">
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-primary">
-          <span>{formatDistanceKm(e.distanceKm)}K</span>
+          <span>{(e as any).distanceDisplay || formatDistanceKm(e.distanceKm)}K</span>
           <span>·</span>
           <span>{new Date(e.date).toDateString()}</span>
         </div>
@@ -727,7 +822,7 @@ function EventCard({ e }: { e: Event }) {
       )}
     </article>
   );
-}
+}, (prevProps, nextProps) => prevProps.e.id === nextProps.e.id);
 
 function Info({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
   return (
@@ -785,7 +880,7 @@ function Field({
 }
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur p-4"
       onClick={onClose}
@@ -802,7 +897,8 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
         </button>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -811,51 +907,92 @@ function CheckInScanModal({ onSuccess, onClose }: { onSuccess: () => void; onClo
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const readerId = useRef(`checkin-reader-${Math.random().toString(36).slice(2)}`).current;
 
-  function stopCamera() {
+function stopCamera() {
     const scanner = scannerRef.current;
     scannerRef.current = null;
     if (scanner) {
       scanner
         .stop()
         .then(() => scanner.clear())
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          // Force-release the camera and wipe any leftover video/canvas
+          // nodes html5-qrcode injected directly into the DOM — same class
+          // of bug as the Elfsight leftover-node issue on Gallery.
+          const el = document.getElementById(readerId);
+          if (el) {
+            el.querySelectorAll("video").forEach((v) => {
+              const stream = v.srcObject as MediaStream | null;
+              stream?.getTracks().forEach((t) => t.stop());
+              v.srcObject = null;
+            });
+            el.innerHTML = "";
+          }
+        });
     }
   }
 
-  useEffect(() => {
-    async function start() {
-      try {
-        const scanner = new Html5Qrcode(readerId);
-        scannerRef.current = scanner;
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 220 },
-          (decodedText) => {
-            stopCamera();
-            if (decodedText === "LFR-CHECKIN") {
-              onSuccess();
-            } else {
-              toast.error("Wrong QR code. Ask the organiser for the check-in code.");
-              onClose();
-            }
-          },
-          () => {
-            // per-frame miss — expected, ignore
-          },
-        );
-      } catch (err) {
-        console.error(err);
-        setError("Camera access denied. Please allow camera access and try again.");
-      }
-    }
-    start();
-    return () => stopCamera();
-  }, []);
+useEffect(() => {
+  let isMounted = true;
 
-  return (
+  async function start() {
+    try {
+      const scanner = new Html5Qrcode(readerId);
+      
+if (!isMounted) {
+  // Component unmounted before scanner initialized
+  try {
+    scanner.clear();
+  } catch {
+    // ignore
+  }
+  return;
+}
+
+      scannerRef.current = scanner;
+      
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 220 },
+        (decodedText) => {
+          if (!isMounted) return; // ✅ Don't process if unmounting
+          stopCamera();
+          if (decodedText === "LFR-CHECKIN") {
+            onSuccess();
+          } else {
+            toast.error("Wrong QR code. Ask the organiser for the check-in code.");
+            onClose();
+          }
+        },
+        () => {
+          // per-frame miss — expected, ignore
+        },
+      );
+    } catch (err: any) {
+      if (!isMounted) return;
+      console.error(err);
+      setError("Camera access denied. Please allow camera access and try again.");
+    }
+  }
+
+  start();
+
+  // ✅ IMPROVED CLEANUP
+  return () => {
+    isMounted = false;
+    if (scannerRef.current) {
+      stopCamera();
+    }
+  };
+}, []);
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur p-4"
-      onClick={onClose}
+      onClick={() => {
+        stopCamera();
+        onClose();
+      }}
     >
       <div
         className="relative w-full max-w-sm rounded-3xl border border-border bg-card p-6 flex flex-col items-center gap-5"
@@ -885,6 +1022,7 @@ function CheckInScanModal({ onSuccess, onClose }: { onSuccess: () => void; onClo
           />
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

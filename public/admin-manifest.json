@@ -1,23 +1,31 @@
 {
-  "name": "Waven Harper Fitness Admin",
+  "name": "WH Fitness Admin",
   "short_name": "WH Admin",
-  "description": "Admin panel for Waven Harper Fitness.",
+  "description": "Admin dashboard",
   "start_url": "/admin",
   "scope": "/admin",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#1a1a1a",
+  "theme_color": "#ff6b35",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/wh-logo.jpeg",
-      "sizes": "192x192",
-      "type": "image/jpeg"
+      "src": "/wh-logo-180-admin.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/wh-logo.jpeg",
+      "src": "/wh-logo-192-admin.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/wh-logo-512-admin.png",
       "sizes": "512x512",
-      "type": "image/jpeg"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

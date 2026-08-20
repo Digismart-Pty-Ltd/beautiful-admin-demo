@@ -14,6 +14,6 @@ export function formatDistanceKm(distanceKm: number | string): string {
 
   return new Intl.NumberFormat("en-ZA", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 3,  // Changed from 1 to 3
   }).format(numericValue);
 }

@@ -204,7 +204,14 @@ export default function Join() {
 
             {(true || isOpenRunner) && (
               <>
-                <Field label="ID / Passport" value={id} onChange={setId} />
+                <Field
+                  label="ID / Passport"
+                  value={id}
+                  onChange={setId}
+                  required
+                  pattern="^\d{13}$|^[A-Za-z0-9]{6,20}$"
+                  title="Enter a 13-digit South African ID number, or a valid passport number (6–20 letters/numbers)."
+                />
                 <Field label="Contact number" value={contact} onChange={setContact} />
                 <Field
                   label="Emergency contact name"
@@ -298,6 +305,8 @@ function Field({
   type = "text",
   required,
   disabled,
+  pattern,
+  title,
 }: {
   label: string;
   value: string;
@@ -305,6 +314,8 @@ function Field({
   type?: string;
   required?: boolean;
   disabled?: boolean;
+  pattern?: string;
+  title?: string;
 }) {
   return (
     <label className="block">
@@ -317,6 +328,8 @@ function Field({
         value={value}
         required={required}
         disabled={disabled}
+        pattern={pattern}
+        title={title}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
       />

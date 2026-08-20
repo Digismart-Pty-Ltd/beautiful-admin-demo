@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Link, Outlet, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
@@ -9,18 +9,19 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 
 import Home from "@/pages/Home";
-import Events from "@/pages/Events";
-import RunningClub from "@/pages/RunningClub";
-import Membership from "@/pages/Membership";
-import Join from "@/pages/Join";
-import Login from "@/pages/Login";
-import Admin from "@/pages/Admin";
 import ScrollToTop from "@/components/ScrollToTop";
-import NotificationsPage from "@/pages/Notifications";
-import Gallery from "@/pages/Gallery";
-import Privacy from "@/pages/Privacy";
-import Support from "@/pages/Support";
-import AdvertiseApply from "@/pages/AdvertiseApply";
+
+const Events = lazy(() => import("@/pages/Events"));
+const RunningClub = lazy(() => import("@/pages/RunningClub"));
+const Membership = lazy(() => import("@/pages/Membership"));
+const Join = lazy(() => import("@/pages/Join"));
+const Login = lazy(() => import("@/pages/Login"));
+const Admin = lazy(() => import("@/pages/Admin"));
+const NotificationsPage = lazy(() => import("@/pages/Notifications"));
+const Gallery = lazy(() => import("@/pages/Gallery"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
+const Support = lazy(() => import("@/pages/Support"));
+const AdvertiseApply = lazy(() => import("@/pages/AdvertiseApply"));
 
 
 const queryClient = new QueryClient();
@@ -52,9 +53,10 @@ function ManifestUpdater() {
   const location = useLocation();
 
   useEffect(() => {
-    const manifestUrl = location.pathname.startsWith("/admin")
-      ? "/admin-manifest.json"
-      : "/manifest.json";
+    const isAdmin = location.pathname.startsWith("/admin");
+    const manifestUrl = isAdmin ? "/admin-manifest.json" : "/manifest.json";
+    const appTitle = isAdmin ? "WH Admin" : "WH Fitness";
+    const touchIconHref = isAdmin ? "/wh-logo-180-admin.png" : "/wh-logo-180.png";
 
     let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (!manifestLink) {
@@ -62,9 +64,28 @@ function ManifestUpdater() {
       manifestLink.rel = "manifest";
       document.head.appendChild(manifestLink);
     }
-
     if (manifestLink.getAttribute("href") !== manifestUrl) {
       manifestLink.setAttribute("href", manifestUrl);
+    }
+
+    let appMeta = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    if (!appMeta) {
+      appMeta = document.createElement("meta");
+      appMeta.name = "apple-mobile-web-app-title";
+      document.head.appendChild(appMeta);
+    }
+    if (appMeta.getAttribute("content") !== appTitle) {
+      appMeta.setAttribute("content", appTitle);
+    }
+
+    let touchIconLink = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    if (!touchIconLink) {
+      touchIconLink = document.createElement("link");
+      touchIconLink.rel = "apple-touch-icon";
+      document.head.appendChild(touchIconLink);
+    }
+    if (touchIconLink.getAttribute("href") !== touchIconHref) {
+      touchIconLink.setAttribute("href", touchIconHref);
     }
   }, [location.pathname]);
 
@@ -72,12 +93,22 @@ function ManifestUpdater() {
 }
 
 function Layout() {
+  const location = useLocation();
+
   return (
     <>
       <SiteHeader />
-      <Outlet />
+      <Outlet key={location.pathname} />
       <SiteFooter />
     </>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-foreground" />
+    </div>
   );
 }
 
@@ -118,24 +149,26 @@ export default function App() {
             <AuthStoreSync />
             <ManifestUpdater />
             <ScrollToTop />
-            <Routes>
-              <Route element={<Layout />}>
-                <Route path="/" element={<Home />} />
-                <Route path="/events" element={<Events />} />
-                <Route path="/running-club" element={<RunningClub />} />
-                <Route path="/membership" element={<Membership />} />
-                <Route path="/join" element={<Join />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/gallery" element={<Gallery />} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/support" element={<Support />} />
-                <Route path="/advertise" element={<AdvertiseApply />} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-              {/* Admin has its own layout */}
-              <Route path="/admin" element={<Admin />} />
-            </Routes>
+            <Suspense fallback={<PageLoading />}>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/events" element={<Events />} />
+                  <Route path="/running-club" element={<RunningClub />} />
+                  <Route path="/membership" element={<Membership />} />
+                  <Route path="/join" element={<Join />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/gallery" element={<Gallery />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/support" element={<Support />} />
+                  <Route path="/advertise" element={<AdvertiseApply />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+                {/* Admin has its own layout */}
+                <Route path="/admin" element={<Admin />} />
+              </Routes>
+            </Suspense>
             <Toaster theme="dark" position="top-center" richColors />
           </AuthProvider>
         </StoreProvider>

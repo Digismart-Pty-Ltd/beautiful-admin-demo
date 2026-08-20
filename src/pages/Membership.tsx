@@ -128,7 +128,6 @@ const { currentMember, state } = useStore();
 
     async function runTierMaintenance() {
       const userRef = doc(db, "users", uid!);
-      const { getDoc } = await import("firebase/firestore");
       const snap = await getDoc(userRef);
       if (!snap.exists()) return;
 

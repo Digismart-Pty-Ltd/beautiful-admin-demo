@@ -40,13 +40,30 @@ export default function NotificationsPage() {
   >("idle");
 
   useEffect(() => {
-    if (typeof Notification === "undefined") {
-      setPushStatus("unsupported");
-      return;
+    function updatePushStatus() {
+      if (typeof Notification === "undefined") {
+        setPushStatus("unsupported");
+        return;
+      }
+      if (Notification.permission === "granted") setPushStatus("granted");
+      else if (Notification.permission === "denied") setPushStatus("denied");
+      else setPushStatus("idle");
     }
-    if (Notification.permission === "granted") setPushStatus("granted");
-    else if (Notification.permission === "denied") setPushStatus("denied");
-    else setPushStatus("idle");
+
+    updatePushStatus();
+
+    if (typeof navigator !== "undefined" && "permissions" in navigator) {
+      try {
+        (navigator as any).permissions.query({ name: "notifications" }).then((status: any) => {
+          status.onchange = updatePushStatus;
+        });
+      } catch {
+        // permissions API may not support notifications everywhere
+      }
+    }
+
+    window.addEventListener("focus", updatePushStatus);
+    return () => window.removeEventListener("focus", updatePushStatus);
   }, []);
 
   async function handleEnablePush() {
@@ -152,25 +169,26 @@ export default function NotificationsPage() {
         <h1 className="mt-2 display text-4xl md:text-6xl">Notifications.</h1>
 
         {uid && pushStatus !== "granted" && pushStatus !== "unsupported" && (
-          <>
+          <div className="space-y-3 mt-4">
             {fromLogin && (
-              <p className="mt-4 text-sm text-muted-foreground max-w-xl">
+              <p className="text-sm text-muted-foreground max-w-xl">
                 If you did not accept notifications earlier, you can enable them here. This is a fallback so you can still receive updates after logging in.
               </p>
             )}
             <button
               onClick={handleEnablePush}
-              disabled={pushStatus === "asking" || pushStatus === "denied"}
-              className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs uppercase tracking-widest text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={pushStatus === "asking"}
+              className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs uppercase tracking-widest text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <BellRing size={13} />
-              {pushStatus === "asking"
-                ? "Requesting…"
-                : pushStatus === "denied"
-                  ? "Notifications blocked — enable in browser settings"
-                  : "Enable push notifications"}
+              {pushStatus === "asking" ? "Requesting…" : "Enable push notifications"}
             </button>
-          </>
+            {pushStatus === "denied" && (
+              <p className="text-sm text-muted-foreground max-w-xl">
+                Notifications are blocked in your browser. You can still return here anytime and click Enable push notifications after updating your browser settings.
+              </p>
+            )}
+          </div>
         )}
 
         {!loading && notifs.length > 0 && (

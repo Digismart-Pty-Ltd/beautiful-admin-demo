@@ -46,12 +46,25 @@ export default function Login() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
+
+    let permissionPromise: Promise<NotificationPermission> | null = null;
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      permissionPromise = Notification.requestPermission();
+    }
+
     try {
       await loginUser(email, password);
       setLoginPrompted(true);
-      if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+
+      const permission = permissionPromise
+        ? await permissionPromise
+        : typeof Notification !== "undefined"
+        ? Notification.permission
+        : "default";
+
+      if (permission === "granted" && auth.currentUser) {
         const token = await requestPushToken();
-        if (token && auth.currentUser) {
+        if (token) {
           await savePushToken(auth.currentUser.uid, token);
         }
       }
