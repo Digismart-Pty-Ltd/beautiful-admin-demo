@@ -10,10 +10,10 @@ import {
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
 import { subscribeToEvents } from "./eventService";
-import { signInAsAdmin } from "@/services/authService";
 import type { Event, Member, Reward, Tier } from "./demo-data";
 
 const KEY = "whf:store:v1";
+const ADMIN_KEY = "wh_admin_session";
 
 export type CurrentUser =
   | { kind: "member"; id: string }
@@ -62,7 +62,7 @@ function load(): State {
   if (typeof window === "undefined") return initial;
   try {
     const raw = localStorage.getItem(KEY);
-    const isAdmin = localStorage.getItem("wh_admin") === "1";
+    const isAdmin = localStorage.getItem(ADMIN_KEY) === "1";
     const base = raw ? { ...initial, ...JSON.parse(raw) } : initial;
     return isAdmin ? { ...base, currentUserKind: "admin", currentUserId: null } : base;
   } catch {
@@ -75,11 +75,6 @@ function save(s: State) {
   try {
     const { currentUserId, currentUserKind, ...rest } = s;
     localStorage.setItem(KEY, JSON.stringify(rest));
-    if (currentUserKind === "admin") {
-      localStorage.setItem("wh_admin", "1");
-    } else {
-      localStorage.removeItem("wh_admin");
-    }
   } catch {}
 }
 
@@ -315,12 +310,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return false;
     },
 
-    loginAdmin: async () => {
-      await signInAsAdmin();
+    loginAdmin: () => {
+      localStorage.setItem(ADMIN_KEY, "1");
       mutate((s) => ({ ...s, currentUserKind: "admin", currentUserId: null }));
     },
 
-    logout: () => mutate((s) => ({ ...s, currentUserId: null, currentUserKind: null })),
+    logout: () => {
+      if (state.currentUserKind === "admin") {
+        localStorage.removeItem(ADMIN_KEY);
+      }
+      mutate((s) => ({ ...s, currentUserId: null, currentUserKind: null }));
+    },
 
     signUpForEvent: (eventId, fields) => {
       const event = state.events.find((e) => e.id === eventId);

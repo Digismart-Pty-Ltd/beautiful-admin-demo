@@ -21,7 +21,6 @@ const NotificationsPage = lazy(() => import("@/pages/Notifications"));
 const Gallery = lazy(() => import("@/pages/Gallery"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Support = lazy(() => import("@/pages/Support"));
-const AdvertiseApply = lazy(() => import("@/pages/AdvertiseApply"));
 
 
 const queryClient = new QueryClient();
@@ -57,6 +56,7 @@ function ManifestUpdater() {
     const manifestUrl = isAdmin ? "/admin-manifest.json" : "/manifest.json";
     const appTitle = isAdmin ? "WH Admin" : "WH Fitness";
     const touchIconHref = isAdmin ? "/wh-logo-180-admin.png" : "/wh-logo-180.png";
+    const themeColor = isAdmin ? "#000000" : "#000000";
 
     let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (!manifestLink) {
@@ -86,6 +86,11 @@ function ManifestUpdater() {
     }
     if (touchIconLink.getAttribute("href") !== touchIconHref) {
       touchIconLink.setAttribute("href", touchIconHref);
+    }
+
+    const themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (themeColorMeta && themeColorMeta.getAttribute("content") !== themeColor) {
+      themeColorMeta.setAttribute("content", themeColor);
     }
   }, [location.pathname]);
 
@@ -162,7 +167,6 @@ export default function App() {
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/support" element={<Support />} />
-                  <Route path="/advertise" element={<AdvertiseApply />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>
                 {/* Admin has its own layout */}

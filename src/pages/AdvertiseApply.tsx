@@ -23,7 +23,7 @@ export default function AdvertiseApply() {
     : null;
   const effectiveMember = currentMember ?? authMember;
   const isLoggedIn = Boolean(user || currentMember);
-  const price = isLoggedIn ? 200 : 500;
+  const price = isLoggedIn ? 250 : 500;
 
   const [businessName, setBusinessName] = useState("");
   const [slogan, setSlogan] = useState("");
@@ -187,7 +187,7 @@ export default function AdvertiseApply() {
               <span>
                 {isLoggedIn ? (
                   <>
-                    You're signed in — member rate: <strong>R200/month</strong>.
+                    You're signed in — member rate: <strong>R250/month</strong>.
                   </>
                 ) : (
                   <>

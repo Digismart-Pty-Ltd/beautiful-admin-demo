@@ -15,7 +15,7 @@ export type Event = {
   description: string;
   image: string;
   membersOnly: boolean;
-  distanceKm: number;
+  distanceKm: number | string;
   attendees: { name: string; tier?: Tier; openRunner?: boolean }[];
 };
 

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 function setAppManifest(isAdmin: boolean) {
   const manifestUrl = isAdmin ? "/admin-manifest.json" : "/manifest.json";
   const appTitle = isAdmin ? "WH Admin" : "WH Fitness";
-  const touchIconHref = "/wh-logo.jpeg";
+  const touchIconHref = isAdmin ? "/wh-logo-180-admin.png" : "/wh-logo-180.png";
+  const themeColor = isAdmin ? "#ff6b35" : "#000000";
 
   let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
   if (!manifestLink) {
@@ -29,12 +29,16 @@ function setAppManifest(isAdmin: boolean) {
     document.head.appendChild(touchIconLink);
   }
   touchIconLink.setAttribute("href", touchIconHref);
+
+  const themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute("content", themeColor);
+  }
 }
 
 export default function InstallPWA() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showIosInstructions, setShowIosInstructions] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
     function beforeInstallHandler(e: any) {
@@ -46,16 +50,10 @@ export default function InstallPWA() {
   }, []);
 
   async function handleInstall(isAdmin: boolean) {
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-
-    if (isAdmin && isIos) {
-      // Force a real navigation on iOS so Safari fetches the dedicated admin page.
-      window.location.assign("/admin/index.html");
-      return;
-    }
-
     if (isAdmin) {
-      navigate("/admin");
+      setAppManifest(true);
+      window.location.assign("/admin");
+      return;
     }
 
     // Ensure manifest and apple meta reflect target app

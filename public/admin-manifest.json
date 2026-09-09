@@ -2,11 +2,12 @@
   "name": "WH Fitness Admin",
   "short_name": "WH Admin",
   "description": "Admin dashboard",
-  "start_url": "/admin",
-  "scope": "/admin",
+  "id": "/admin/?pwa=admin",
+  "start_url": "/admin/?pwa=admin",
+  "scope": "/admin/",
   "display": "standalone",
-  "background_color": "#1a1a1a",
-  "theme_color": "#ff6b35",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait",
   "icons": [
     {

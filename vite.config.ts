@@ -34,6 +34,10 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, "index.html"),
+          admin: path.resolve(__dirname, "admin.html"),
+        },
       output: {
         // Split the shared "everyone needs this" bundle into separate
         // vendor chunks so the browser can cache them independently —

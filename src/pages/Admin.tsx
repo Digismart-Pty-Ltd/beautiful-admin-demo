@@ -461,6 +461,7 @@ function AdminCore() {
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "qrcodes", label: "QR Codes", icon: QrCode },
     { id: "sponsors", label: "Sponsors", icon: ImagePlus },
+    { id: "adverts", label: "Adverts", icon: Megaphone },
   ];
 
   return (
@@ -606,6 +607,7 @@ function AdminCore() {
           {tab === "notifications" && <NotificationsAdmin />}
           {tab === "qrcodes" && <QRCodesAdmin />}
           {tab === "sponsors" && <SponsorsAdmin />}
+          {tab === "adverts" && <AdvertsAdmin />}
         </div>
       </main>
     </div>
@@ -706,6 +708,102 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           ← Back to site
         </Link>
       </div>
+    </div>
+  );
+}
+
+// ─── Adverts Admin ───────────────────────────────────────────────────────────
+
+function AdvertsAdmin() {
+  const [rows, setRows] = useState<Advertisement[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToAdvertisements(setRows);
+    return () => unsub?.();
+  }, []);
+
+  async function approve(ad: Advertisement) {
+    await updateAdvertisement(ad.id, { status: "approved", enabled: true });
+  }
+
+  async function reject(ad: Advertisement) {
+    await updateAdvertisement(ad.id, { status: "rejected", enabled: false });
+  }
+
+  async function toggleEnabled(ad: Advertisement) {
+    await updateAdvertisement(ad.id, { enabled: !ad.enabled });
+  }
+
+  async function remove(ad: Advertisement) {
+    if (!confirm(`Delete advert for ${ad.businessName}?`)) return;
+    await deleteAdvertisement(ad.id);
+  }
+
+  return (
+    <div className="space-y-4">
+      {rows.length === 0 ? (
+        <Panel title="Adverts">
+          <p className="text-sm text-muted-foreground">No advertising applications yet.</p>
+        </Panel>
+      ) : (
+        rows.map((ad) => (
+          <div key={ad.id} className="rounded-2xl border border-border bg-card p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="h-16 w-16 overflow-hidden rounded-2xl border border-border bg-background flex items-center justify-center">
+                  {ad.logoUrl ? (
+                    <img src={ad.logoUrl} alt={ad.businessName} className="h-full w-full object-contain" />
+                  ) : (
+                    <Megaphone size={22} className="text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <div className="display text-xl">{ad.businessName}</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-primary mt-1">{ad.status}</div>
+                  <p className="mt-2 text-sm text-muted-foreground">{ad.slogan}</p>
+                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                    <div>Contact: {ad.contactName} · {ad.contactEmail}</div>
+                    <div>Phone: {ad.contactPhone}</div>
+                    <div>Website: {ad.websiteUrl}</div>
+                    <div>Order: {ad.orderNumber} · R{ad.price}/month</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 md:justify-end">
+                {ad.status !== "approved" && (
+                  <button
+                    onClick={() => approve(ad)}
+                    className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-400"
+                  >
+                    Accept
+                  </button>
+                )}
+                {ad.status === "approved" && (
+                  <button
+                    onClick={() => toggleEnabled(ad)}
+                    className="rounded-full border border-primary/40 bg-primary/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"
+                  >
+                    {ad.enabled ? "Disable" : "Enable"}
+                  </button>
+                )}
+                <button
+                  onClick={() => reject(ad)}
+                  className="rounded-full border border-destructive/40 bg-destructive/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-destructive"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => remove(ad)}
+                  className="rounded-full border border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -1275,7 +1373,10 @@ const filteredRegs = search.trim()
       })
     : eventRegs;
 
-  async function handleManualCheckIn(regId: string) {
+  async function handleManualCheckIn(regId: string, attendeeName: string) {
+    const confirmed = window.confirm(`Check in ${attendeeName} for ${e.title}?`);
+    if (!confirmed) return;
+
     setCheckingIn(regId);
     try {
       await updateDoc(doc(db, "eventRegistrations", regId), {
@@ -1429,7 +1530,7 @@ const filteredRegs = search.trim()
                             </span>
                           ) : (
                             <button
-                              onClick={() => handleManualCheckIn(r.id)}
+                              onClick={() => handleManualCheckIn(r.id, r.name)}
                               disabled={checkingIn === r.id}
                               className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-widest hover:border-primary hover:text-primary transition active:scale-90 disabled:opacity-40"
                             >
@@ -1585,36 +1686,15 @@ useEffect(() => {
 <In
   label="Distance (km)"
   type="text"
-  inputMode="decimal"
-  pattern="[0-9]*[.,]?[0-9]{0,3}"
   value={distanceInput}
   onChange={(v) => {
-    const sanitized = v.replace(/[^0-9,.]/g, "");
-
-    if (sanitized === "") {
-      setDistanceInput("");
-      setF((prev) => ({ ...prev, distanceKm: 0, distanceDisplay: "" }));
-      return;
-    }
-
-    // Split on decimal/comma separator and limit decimals to 3
-    const parts = sanitized.split(/[,.]/);
-    const integerPart = parts[0]; // don't force "0" — let it stay empty while typing
-    const decimalPart = parts[1] !== undefined ? parts[1].slice(0, 3) : ""; // limit to 3 decimals
-
-    const hasSeparator = sanitized.includes(",") || sanitized.includes(".");
-    const displayValue = hasSeparator ? `${integerPart},${decimalPart}` : integerPart;
-    const normalized = hasSeparator ? `${integerPart || "0"}.${decimalPart}` : integerPart;
-    const parsed = Number(normalized || 0);
-
-    setDistanceInput(displayValue);
+    setDistanceInput(v);
     setF((prev) => ({
       ...prev,
-      distanceKm: Number.isFinite(parsed) ? parsed : 0,
-      distanceDisplay: displayValue,
+      distanceKm: v,
+      distanceDisplay: v,
     }));
   }}
-  required
 />
           </div>
 

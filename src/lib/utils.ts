@@ -5,15 +5,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDistanceKm(distanceKm: number | string): string {
-  const numericValue = typeof distanceKm === "number" ? distanceKm : Number(distanceKm);
-
-  if (!Number.isFinite(numericValue)) {
-    return "0";
+export function formatDistanceKm(distanceKm: number | string | null | undefined): string {
+  if (typeof distanceKm === "string") {
+    return distanceKm.trim() === "" ? "0" : distanceKm.trim();
   }
 
-  return new Intl.NumberFormat("en-ZA", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,  // Changed from 1 to 3
-  }).format(numericValue);
+  if (typeof distanceKm === "number") {
+    if (!Number.isFinite(distanceKm)) {
+      return "0";
+    }
+
+    return new Intl.NumberFormat("en-ZA", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 3,
+    }).format(distanceKm);
+  }
+
+  return "0";
 }

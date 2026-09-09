@@ -500,7 +500,9 @@ useEffect(() => {
 
       <div className="p-6">
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-primary">
-          <span>{(e as any).distanceDisplay || formatDistanceKm(e.distanceKm)}K</span>
+          <span>
+            {(e as any).distanceDisplay ?? formatDistanceKm(e.distanceKm)}
+          </span>
           <span>·</span>
           <span>{new Date(e.date).toDateString()}</span>
         </div>
