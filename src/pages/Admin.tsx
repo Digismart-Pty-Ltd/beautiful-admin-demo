@@ -36,6 +36,8 @@ import {
   subscribeToAdvertisements,
   updateAdvertisement,
   deleteAdvertisement,
+  deactivateExpiredAdvertisements,
+  isAdvertisementExpired,
   type Advertisement,
 } from "@/lib/advertService";
 import type { Event, Reward, Tier } from "@/lib/demo-data";
@@ -70,6 +72,7 @@ import {
 import { db } from "@/lib/firebase";
 import { ADMIN_EMAIL } from "@/lib/demo-data";
 import { formatDistanceKm } from "@/lib/utils";
+import { signInAsAdmin } from "@/services/authService";
 import {
   subscribeToSponsors,
   createSponsor,
@@ -624,18 +627,25 @@ export default function Admin() {
 
 // ─── Password Login ───────────────────────────────────────────────────────────
 
-function AdminLogin({ onLogin }: { onLogin: () => void }) {
+function AdminLogin({ onLogin }: { onLogin: () => void | Promise<void> }) {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [shaking, setShaking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password === ADMIN_PASSWORD) {
-      onLogin();
-      toast.success("Welcome back, admin.");
+      try {
+        await signInAsAdmin();
+        await onLogin();
+        toast.success("Welcome back, admin.");
+      } catch (err) {
+        console.error("Admin authentication failed:", err);
+        const code = (err as { code?: string })?.code;
+        setError(code ? `Firebase login failed (${code}).` : "Could not connect to Firebase.");
+      }
     } else {
       setError("Incorrect password. Try again.");
       setShaking(true);
@@ -722,7 +732,17 @@ function AdvertsAdmin() {
     return () => unsub?.();
   }, []);
 
+  useEffect(() => {
+    if (rows.length > 0) {
+      void deactivateExpiredAdvertisements(rows);
+    }
+  }, [rows]);
+
   async function approve(ad: Advertisement) {
+    if (isAdvertisementExpired(ad)) {
+      toast.error("This advert has expired. Update its activation period first.");
+      return;
+    }
     await updateAdvertisement(ad.id, { status: "approved", enabled: true });
   }
 
@@ -731,6 +751,10 @@ function AdvertsAdmin() {
   }
 
   async function toggleEnabled(ad: Advertisement) {
+    if (!ad.enabled && isAdvertisementExpired(ad)) {
+      toast.error("This advert has expired. Update its activation period first.");
+      return;
+    }
     await updateAdvertisement(ad.id, { enabled: !ad.enabled });
   }
 
@@ -746,63 +770,114 @@ function AdvertsAdmin() {
           <p className="text-sm text-muted-foreground">No advertising applications yet.</p>
         </Panel>
       ) : (
-        rows.map((ad) => (
-          <div key={ad.id} className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="h-16 w-16 overflow-hidden rounded-2xl border border-border bg-background flex items-center justify-center">
-                  {ad.logoUrl ? (
-                    <img src={ad.logoUrl} alt={ad.businessName} className="h-full w-full object-contain" />
-                  ) : (
-                    <Megaphone size={22} className="text-muted-foreground" />
-                  )}
-                </div>
-                <div>
-                  <div className="display text-xl">{ad.businessName}</div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mt-1">{ad.status}</div>
-                  <p className="mt-2 text-sm text-muted-foreground">{ad.slogan}</p>
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <div>Contact: {ad.contactName} · {ad.contactEmail}</div>
-                    <div>Phone: {ad.contactPhone}</div>
-                    <div>Website: {ad.websiteUrl}</div>
-                    <div>Order: {ad.orderNumber} · R{ad.price}/month</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 md:justify-end">
-                {ad.status !== "approved" && (
-                  <button
-                    onClick={() => approve(ad)}
-                    className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-400"
-                  >
-                    Accept
-                  </button>
-                )}
-                {ad.status === "approved" && (
-                  <button
-                    onClick={() => toggleEnabled(ad)}
-                    className="rounded-full border border-primary/40 bg-primary/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"
-                  >
-                    {ad.enabled ? "Disable" : "Enable"}
-                  </button>
-                )}
-                <button
-                  onClick={() => reject(ad)}
-                  className="rounded-full border border-destructive/40 bg-destructive/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-destructive"
-                >
-                  Reject
-                </button>
-                <button
-                  onClick={() => remove(ad)}
-                  className="rounded-full border border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1120px] text-sm">
+              <thead className="bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <tr>
+                  <th className="p-4 text-left">Business</th>
+                  <th className="p-4 text-left">Contact</th>
+                  <th className="p-4 text-left">Website</th>
+                  <th className="p-4 text-left">Order</th>
+                  <th className="p-4 text-left">Format</th>
+                  <th className="p-4 text-left">Period</th>
+                  <th className="p-4 text-left">Status</th>
+                  <th className="p-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((ad) => (
+                  <tr key={ad.id} className="hover:bg-secondary/30">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3 min-w-[220px]">
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-border bg-background flex items-center justify-center">
+                          {(ad.imageUrl || ad.logoUrl) ? (
+                            <img
+                              src={ad.imageUrl || ad.logoUrl}
+                              alt={ad.businessName}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <Megaphone size={18} className="text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{ad.businessName}</div>
+                          <div className="mt-1 max-w-[240px] truncate text-xs text-muted-foreground">
+                            {ad.slogan}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 text-xs text-muted-foreground">
+                      <div>{ad.contactName}</div>
+                      <div>{ad.contactEmail}</div>
+                      <div>{ad.contactPhone}</div>
+                    </td>
+                    <td className="p-4 max-w-[220px] truncate text-xs text-muted-foreground">
+                      {ad.websiteUrl}
+                    </td>
+                    <td className="p-4 whitespace-nowrap text-xs text-muted-foreground">
+                      <div>{ad.orderNumber}</div>
+                      <div className="mt-1">R{ad.price}/month</div>
+                    </td>
+                    <td className="p-4 whitespace-nowrap text-xs text-muted-foreground">
+                      <div className="capitalize">{ad.adType ?? "logo"}</div>
+                      <div className="mt-1">{ad.dimensions ?? "Logo"}</div>
+                    </td>
+                    <td className="p-4 whitespace-nowrap text-xs text-muted-foreground">
+                      <div>From {ad.activationDate ?? "-"}</div>
+                      <div className="mt-1">Until {ad.expiryDate ?? "-"}</div>
+                      <div className="mt-1">{ad.months ?? "-"} month(s)</div>
+                    </td>
+                    <td className="p-4 whitespace-nowrap">
+                      <div className={`text-xs uppercase tracking-[0.2em] ${isAdvertisementExpired(ad) ? "text-destructive" : "text-primary"}`}>
+                        {isAdvertisementExpired(ad) ? "expired" : ad.status}
+                      </div>
+                      {ad.status === "approved" && (
+                        <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {ad.enabled ? "Enabled" : "Disabled"}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex justify-end gap-2">
+                        {ad.status !== "approved" && (
+                          <button
+                            onClick={() => approve(ad)}
+                            className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-400"
+                          >
+                            Accept
+                          </button>
+                        )}
+                        {ad.status === "approved" && (
+                          <button
+                            onClick={() => toggleEnabled(ad)}
+                            className="rounded-full border border-primary/40 bg-primary/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"
+                          >
+                            {ad.enabled ? "Disable" : "Enable"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => reject(ad)}
+                          className="rounded-full border border-destructive/40 bg-destructive/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-destructive"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => remove(ad)}
+                          className="rounded-full border border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))
+        </div>
       )}
     </div>
   );
@@ -1204,8 +1279,9 @@ function EventsAdmin() {
         }
       }
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to save event. Check your Firebase config.");
+      console.error("Failed to save event:", err);
+      const code = (err as { code?: string })?.code;
+      toast.error(code ? `Failed to save event (${code}).` : "Failed to save event. Try again.");
     } finally {
       setSaving(false);
       setEditing(null);

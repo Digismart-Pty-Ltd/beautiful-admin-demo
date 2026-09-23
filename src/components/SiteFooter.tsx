@@ -2,6 +2,9 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, CalendarDays, Trophy, User, Images } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
+import AdvertiseBanner from "@/components/AdvertiseBanner";
+
+const SHOW_AD_BANNER = true;
 
 const tabs = [
   { to: "/", label: "Home", icon: Home, exact: true },
@@ -19,8 +22,14 @@ export function SiteFooter() {
 
   return (
     <>
+      {SHOW_AD_BANNER && (
+        <div className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 pb-4 md:pb-6">
+          <AdvertiseBanner />
+        </div>
+      )}
+
       {/* ── Desktop footer ── */}
-      <footer className="hidden md:block border-t border-border mt-16">
+      <footer className="hidden md:block border-t border-border mt-8">
         <div className="mx-auto max-w-6xl px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             © {new Date().getFullYear()} Waven Harper Fitness. All rights reserved.
@@ -40,6 +49,11 @@ export function SiteFooter() {
             <span className="opacity-30">·</span>
             <Link to="/support" className="hover:text-foreground transition">
               Support
+            </Link>
+
+            <span className="opacity-30">·</span>
+            <Link to="/advertisements" className="hover:text-foreground transition">
+              Advertisements
             </Link>
 
             <span className="opacity-30">·</span>
@@ -77,6 +91,10 @@ export function SiteFooter() {
             <span className="opacity-30">·</span>
             <Link to="/support" className="hover:text-foreground transition">
               Support
+            </Link>
+            <span className="opacity-30">·</span>
+            <Link to="/advertisements" className="hover:text-foreground transition">
+              Advertisements
             </Link>
             <span className="opacity-30">·</span>
             <a

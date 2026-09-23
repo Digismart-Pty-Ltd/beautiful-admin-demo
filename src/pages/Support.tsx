@@ -86,7 +86,7 @@ export default function Support() {
         {/* Contact cards */}
         <div className="mb-12">
           <a
-            href="mailto:info@dsmart.co.za?subject=Support%20Request&body=Hi%20Waven%2C%20I%20need%20help%20with..."
+            href="mailto:wavenharper@gmail.com?subject=Support%20Request&body=Hi%20Waven%2C%20I%20need%20help%20with..."
             className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-foreground/40 transition"
           >
             <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -96,7 +96,7 @@ export default function Support() {
               <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 Email
               </div>
-              <div className="display text-sm truncate">info@dsmart.co.za</div>
+              <div className="display text-sm truncate">wavenharper@gmail.com</div>
             </div>
             <ArrowUpRight
               size={13}

@@ -9,32 +9,33 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, storage } from "./firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import type { Event } from "./demo-data";
 
 const EVENTS_COL = "events";
 
-// ── Convert an image file into a base64 data URL for Firestore storage ─────
-// ── Convert an image file into a compressed base64 data URL ─────────────────
+// ── Resize/compress an image file, then upload it to Firebase Storage ───────
+// Returns a download URL that gets stored on the event doc — never a base64
+// blob — so Firestore docs stay tiny and the admin/events lists don't have
+// to decode multi-hundred-KB strings per event in memory (this was the
+// source of the Android OOM crashes on the admin Events tab).
 export async function uploadEventImage(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<string> {
-  onProgress?.(10);
+  onProgress?.(5);
 
-  // Step 1: read the raw file into an object URL so the browser can decode it
   const objectUrl = URL.createObjectURL(file);
 
-  return new Promise((resolve, reject) => {
+  const blob = await new Promise<Blob>((resolve, reject) => {
     const img = new Image();
 
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
-      onProgress?.(50);
 
       try {
-        // Step 2: draw onto a canvas, capped at 1200px wide to stay well under
-        // Firestore's 1 MB document limit (base64 of a 1200×800 JPEG ≈ 150–300 KB)
+        // Cap at 1200px wide/tall to keep uploads small and fast to load
         const MAX_W = 1200;
         const MAX_H = 1200;
         let { width, height } = img;
@@ -60,27 +61,18 @@ export async function uploadEventImage(
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        onProgress?.(80);
-
-        // Export as JPEG at 82% quality — good visual quality, small file size
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-
-        onProgress?.(100);
-        resolve(dataUrl);
+        canvas.toBlob(
+          (result) => {
+            if (result) resolve(result);
+            else reject(new Error("Could not compress image."));
+          },
+          "image/jpeg",
+          0.82,
+        );
       } catch (canvasErr) {
-        // Canvas fallback — read raw and hope it's small enough
-        console.error("Canvas compression failed, falling back:", canvasErr);
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === "string") {
-            onProgress?.(100);
-            resolve(reader.result);
-          } else {
-            reject(new Error("Unable to read image file."));
-          }
-        };
-        reader.onerror = () => reject(reader.error ?? new Error("Failed to read image file."));
-        reader.readAsDataURL(file);
+        // Canvas fallback — upload the original file untouched
+        console.error("Canvas compression failed, falling back to raw file:", canvasErr);
+        resolve(file);
       }
     };
 
@@ -90,6 +82,25 @@ export async function uploadEventImage(
     };
 
     img.src = objectUrl;
+  });
+
+  const path = `events/${Date.now()}-${file.name}`;
+  const storageRef = ref(storage, path);
+  const task = uploadBytesResumable(storageRef, blob);
+
+  return new Promise((resolve, reject) => {
+    task.on(
+      "state_changed",
+      (snap) => {
+        const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+        onProgress?.(Math.max(pct, 5));
+      },
+      reject,
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref);
+        resolve(url);
+      },
+    );
   });
 }
 

@@ -56,17 +56,23 @@ export default function Login() {
       await loginUser(email, password);
       setLoginPrompted(true);
 
-      const permission = permissionPromise
-        ? await permissionPromise
-        : typeof Notification !== "undefined"
-        ? Notification.permission
-        : "default";
+      // Push notifications are optional and must not make a successful login
+      // look like it failed when iOS/Android blocks the service worker or token.
+      try {
+        const permission = permissionPromise
+          ? await permissionPromise
+          : typeof Notification !== "undefined"
+            ? Notification.permission
+            : "default";
 
-      if (permission === "granted" && auth.currentUser) {
-        const token = await requestPushToken();
-        if (token) {
-          await savePushToken(auth.currentUser.uid, token);
+        if (permission === "granted" && auth.currentUser) {
+          const token = await requestPushToken();
+          if (token) {
+            await savePushToken(auth.currentUser.uid, token);
+          }
         }
+      } catch (pushError) {
+        console.warn("Push notification setup skipped after successful login:", pushError);
       }
     } catch (err: any) {
       setSubmitting(false);

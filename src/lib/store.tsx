@@ -154,9 +154,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
 
-    const unsubscribeEvents = subscribeToEvents((events) => {
+    let unsubscribeEvents = subscribeToEvents((events) => {
       mutate((s) => ({ ...s, events }));
     });
+
+    const refreshEvents = () => {
+      unsubscribeEvents();
+      unsubscribeEvents = subscribeToEvents((events) => {
+        mutate((s) => ({ ...s, events }));
+      });
+    };
+
+    window.addEventListener("online", refreshEvents);
+    document.addEventListener("visibilitychange", refreshEvents);
 
     const unsubscribeUsers = onSnapshot(
       collection(db, "users"),
@@ -197,6 +207,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       unsubscribeEvents();
       unsubscribeUsers();
+      window.removeEventListener("online", refreshEvents);
+      document.removeEventListener("visibilitychange", refreshEvents);
     };
   }, [hydrated, mutate]);
 

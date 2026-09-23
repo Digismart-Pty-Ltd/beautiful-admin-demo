@@ -3,6 +3,12 @@ import { precacheAndRoute } from "workbox-precaching";
 // Required placeholder — vite-plugin-pwa injects the asset list here
 precacheAndRoute((self as any).__WB_MANIFEST);
 
+// Activate updated app assets promptly when an installed PWA is opened.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event: any) => {
+  event.waitUntil((self as any).clients.claim());
+});
+
 // @ts-ignore
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 // @ts-ignore

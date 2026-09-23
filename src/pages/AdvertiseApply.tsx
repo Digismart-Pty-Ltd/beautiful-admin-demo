@@ -1,13 +1,38 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState, type FormEvent } from "react";
 import { ImagePlus, Check, Loader2, ArrowUpRight, ShieldCheck } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 import { BANK_DETAILS, ADMIN_EMAIL } from "@/lib/demo-data";
-import { createAdvertisement, uploadAdvertLogo, generateAdOrderNumber } from "@/lib/advertService";
+import {
+  calculateAdvertExpiry,
+  createAdvertisement,
+  uploadAdvertLogo,
+  generateAdOrderNumber,
+  type AdvertType,
+} from "@/lib/advertService";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+function parseDateInput(value: string): Date | undefined {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+    ? date
+    : undefined;
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function AdvertiseApply() {
   useEffect(() => {
@@ -23,7 +48,17 @@ export default function AdvertiseApply() {
     : null;
   const effectiveMember = currentMember ?? authMember;
   const isLoggedIn = Boolean(user || currentMember);
-  const price = isLoggedIn ? 250 : 500;
+  const [memberAnswer, setMemberAnswer] = useState<"yes" | "no" | "">(isLoggedIn ? "yes" : "");
+  const [adType, setAdType] = useState<AdvertType>("banner");
+  const [activationDate, setActivationDate] = useState(new Date().toISOString().slice(0, 10));
+  const [months, setMonths] = useState("1");
+  const [dimensions, setDimensions] = useState("1200 x 300 px");
+  const price = memberAnswer === "yes" ? 250 : 500;
+  const expiryDate = calculateAdvertExpiry(activationDate, Number(months) || 1);
+
+  useEffect(() => {
+    if (isLoggedIn) setMemberAnswer("yes");
+  }, [isLoggedIn]);
 
   const [businessName, setBusinessName] = useState("");
   const [slogan, setSlogan] = useState("");
@@ -42,7 +77,9 @@ export default function AdvertiseApply() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast.error("Please select an image file.");
-    if (file.size > 10 * 1024 * 1024) return toast.error("Logo must be under 10 MB.");
+    if (file.size > 50 * 1024 * 1024) {
+      return toast.error("Please choose an image under 50 MB so it can be compressed safely.");
+    }
 
     setUploading(true);
     setUploadPct(0);
@@ -52,7 +89,7 @@ export default function AdvertiseApply() {
       toast.success("Logo uploaded.");
     } catch (err) {
       console.error(err);
-      toast.error("Upload failed. Try a different image.");
+      toast.error(err instanceof Error ? err.message : "Upload failed. Try a different image.");
     } finally {
       setUploading(false);
     }
@@ -64,6 +101,10 @@ export default function AdvertiseApply() {
     if (!slogan.trim()) return toast.error("Please enter a slogan or short tagline.");
     if (!websiteUrl.trim()) return toast.error("Please enter the website you want to advertise.");
     if (!logoUrl) return toast.error("Please upload your logo.");
+    if (!memberAnswer) return toast.error("Please tell us whether you are a member.");
+    if (adType === "banner" && !dimensions.trim()) {
+      return toast.error("Please enter the banner dimensions.");
+    }
     if (!contactName.trim()) return toast.error("Please enter a contact name.");
     if (!contactEmail.trim()) return toast.error("Please enter a contact email.");
     if (!contactPhone.trim()) return toast.error("Please enter a contact phone number.");
@@ -81,15 +122,21 @@ export default function AdvertiseApply() {
         contactName,
         contactEmail,
         contactPhone,
-        isMember: isLoggedIn,
+        isMember: memberAnswer === "yes",
         price,
+        adType,
+        imageUrl: logoUrl,
+        dimensions: adType === "logo" ? "Logo" : dimensions,
+        activationDate,
+        months: Math.max(1, Number(months) || 1),
+        expiryDate,
       });
 
       await addDoc(collection(db, "mail"), {
         to: [ADMIN_EMAIL],
         message: {
           subject: `New advertising application ${newOrderNumber} — ${businessName}`,
-          text: `Order #: ${newOrderNumber}\nBusiness: ${businessName}\nSlogan: ${slogan}\nWebsite: ${websiteUrl}\nContact: ${contactName}\nEmail: ${contactEmail}\nPhone: ${contactPhone}\nMember: ${isLoggedIn ? "Yes" : "No"}\nPrice due: R${price}/month\n\nReview and approve in the admin control room once payment is received.`,
+          text: `Order #: ${newOrderNumber}\nBusiness: ${businessName}\nSlogan: ${slogan}\nWebsite: ${websiteUrl}\nContact: ${contactName}\nEmail: ${contactEmail}\nPhone: ${contactPhone}\nMember: ${memberAnswer === "yes" ? "Yes" : "No"}\nAdvert type: ${adType}\nDimensions: ${dimensions}\nActivation: ${activationDate}\nExpiry: ${expiryDate}\nPrice due: R${price}/month\n\nReview and approve in the admin control room once payment is received.`,
         },
       });
 
@@ -186,20 +233,63 @@ export default function AdvertiseApply() {
               <ShieldCheck size={16} className="text-primary shrink-0" />
               <span>
                 {isLoggedIn ? (
-                  <>
-                    You're signed in — member rate: <strong>R250/month</strong>.
-                  </>
+                  <>Member rate: <strong>R250/month</strong>.</>
                 ) : (
-                  <>
-                    Not signed in — guest rate: <strong>R500/month</strong>.{" "}
-                    <Link to="/login" className="text-primary underline">
-                      Log in
-                    </Link>{" "}
-                    for the member rate.
-                  </>
+                  <>Guest rate: <strong>R500/month</strong>.</>
                 )}
               </span>
             </div>
+
+            <fieldset className="space-y-2">
+              <legend className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Are you a member? *
+              </legend>
+              <div className="grid grid-cols-2 gap-3">
+                {(["yes", "no"] as const).map((answer) => (
+                  <label
+                    key={answer}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm capitalize ${
+                      memberAnswer === answer ? "border-primary bg-primary/10" : "border-border"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="member"
+                      value={answer}
+                      checked={memberAnswer === answer}
+                      onChange={() => setMemberAnswer(answer)}
+                      required
+                    />
+                    {answer}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Advert format *
+              </legend>
+              <div className="grid grid-cols-2 gap-3">
+                {(["logo", "banner"] as const).map((type) => (
+                  <label
+                    key={type}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm capitalize ${
+                      adType === type ? "border-primary bg-primary/10" : "border-border"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="adType"
+                      value={type}
+                      checked={adType === type}
+                      onChange={() => setAdType(type)}
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
             <Field label="Business name" value={businessName} onChange={setBusinessName} required />
             <Field label="Slogan / tagline" value={slogan} onChange={setSlogan} required />
@@ -213,15 +303,78 @@ export default function AdvertiseApply() {
 
             <div className="space-y-3">
               <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                Logo *
+                {adType === "banner" ? "Banner image *" : "Logo *"}
               </span>
               <LogoUploader
                 logoUrl={logoUrl}
+                label={adType === "banner" ? "Upload banner" : "Upload logo"}
                 uploading={uploading}
                 uploadPct={uploadPct}
                 onFileChange={handleFileChange}
                 onClear={() => setLogoUrl("")}
               />
+            </div>
+
+            {adType === "banner" && (
+              <Field
+                label="Banner dimensions"
+                value={dimensions}
+                onChange={setDimensions}
+                required
+              />
+            )}
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="block">
+                <label
+                  htmlFor="activation-date"
+                  className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
+                >
+                  Activation date *
+                </label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    id="activation-date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="YYYY-MM-DD"
+                    value={activationDate}
+                    onChange={(event) => setActivationDate(event.target.value)}
+                    required
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Choose activation date"
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary"
+                      >
+                        <CalendarDays size={16} />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={parseDateInput(activationDate)}
+                        onSelect={(date) => {
+                          if (date) setActivationDate(formatDateInput(date));
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+              <Field label="Number of months" value={months} onChange={setMonths} type="number" required />
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Calculated expiry
+                </span>
+                <div className="mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2.5 text-sm">
+                  {expiryDate}
+                </div>
+              </label>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
@@ -270,12 +423,14 @@ export default function AdvertiseApply() {
 
 function LogoUploader({
   logoUrl,
+  label,
   uploading,
   uploadPct,
   onFileChange,
   onClear,
 }: {
   logoUrl: string;
+  label: string;
   uploading: boolean;
   uploadPct: number;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -286,7 +441,7 @@ function LogoUploader({
       <div className="flex items-center gap-3 flex-wrap">
         <label className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs uppercase tracking-widest hover:border-primary cursor-pointer active:scale-95 transition-all">
           <ImagePlus size={13} />
-          {uploading ? `Uploading ${uploadPct}%…` : logoUrl ? "Replace logo" : "Upload logo"}
+          {uploading ? `Uploading ${uploadPct}%…` : logoUrl ? `Replace ${label.toLowerCase()}` : label}
           <input
             type="file"
             accept="image/*"

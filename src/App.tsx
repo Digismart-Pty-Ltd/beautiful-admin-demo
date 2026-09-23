@@ -21,6 +21,8 @@ const NotificationsPage = lazy(() => import("@/pages/Notifications"));
 const Gallery = lazy(() => import("@/pages/Gallery"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Support = lazy(() => import("@/pages/Support"));
+const AdvertiseApply = lazy(() => import("@/pages/AdvertiseApply"));
+const Advertisements = lazy(() => import("@/pages/Advertisements"));
 
 
 const queryClient = new QueryClient();
@@ -167,6 +169,8 @@ export default function App() {
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/support" element={<Support />} />
+                  <Route path="/advertise" element={<AdvertiseApply />} />
+                  <Route path="/advertisements" element={<Advertisements />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>
                 {/* Admin has its own layout */}
