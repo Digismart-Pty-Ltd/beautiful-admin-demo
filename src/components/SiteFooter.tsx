@@ -109,9 +109,8 @@ export function SiteFooter() {
         </div>
       </footer>
 
-      <div aria-hidden className="h-28 md:hidden" />
-      <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none md:hidden">
-        <div className="mx-auto max-w-md px-4 pb-4 pointer-events-auto">
+      <nav className="md:hidden">
+        <div className="mx-auto max-w-md px-4 py-4">
           <div className="rounded-2xl border border-border bg-card/90 backdrop-blur-xl shadow-glow px-2 py-2 grid grid-cols-5 gap-1">
             {tabs.map((t) => {
               const active = t.exact ? pathname === t.to : pathname.startsWith(t.to);

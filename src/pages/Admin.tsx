@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useStore } from "@/lib/store";
+import { nextTierInfo, useStore } from "@/lib/store";
 import React, { useEffect, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
@@ -1944,14 +1944,18 @@ function MembersAdmin() {
     return registrations.filter((r) => r.userId === userId && r.checkedInAt).length;
   }
 
+  const sortedMembers = members
+    .map((member) => ({ ...member, checkInCount: raceCount(member.id) }))
+    .sort((a, b) => b.checkInCount - a.checkInCount || a.name.localeCompare(b.name));
+
   function exportMembersExcel() {
-    const memberRows = members.map((m) => ({
+    const memberRows = sortedMembers.map((m) => ({
       Name: m.name,
       Email: m.email,
       Contact: m.contact ?? "",
       Emergency: m.emergency ?? "",
       Joined: m.joined?.slice(0, 10) ?? "",
-      "Events Attended": raceCount(m.id),
+      "Events Attended": m.checkInCount,
       Tier: m.tier,
       Role: "Member",
       "Waiver Accepted": (m as any).waiverAccepted ? "Yes" : "No",
@@ -1964,8 +1968,8 @@ function MembersAdmin() {
     XLSX.writeFile(wb, "members.xlsx");
   }
 
-  const totalPages = Math.ceil(members.length / ITEMS_PER_PAGE);
-  const paginatedMembers = members.slice(
+  const totalPages = Math.ceil(sortedMembers.length / ITEMS_PER_PAGE);
+  const paginatedMembers = sortedMembers.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
@@ -1975,7 +1979,7 @@ function MembersAdmin() {
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="bg-secondary/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-            Club Members ({loading ? "…" : members.length})
+            Club Members ({loading ? "…" : members.length}) · Check-ins highest first
           </div>
           <button
             onClick={exportMembersExcel}
@@ -1993,7 +1997,7 @@ function MembersAdmin() {
                 <th className="text-left p-4">Contact</th>
                 <th className="text-left p-4">Emergency</th>
                 <th className="text-left p-4">Joined</th>
-                <th className="text-left p-4">Events</th>
+                <th className="text-left p-4">Check-ins / next tier</th>
                 <th className="text-left p-4">Waiver</th>
                 <th className="text-left p-4">Tier</th>
                 <th className="p-4"></th>
@@ -2009,7 +2013,9 @@ function MembersAdmin() {
                   </td>
                 </tr>
               ) : (
-                paginatedMembers.map((m) => (
+                paginatedMembers.map((m) => {
+                  const goal = nextTierInfo(m.checkInCount);
+                  return (
                   <React.Fragment key={m.id}>
                     <tr
                       className="hover:bg-secondary/30 cursor-pointer"
@@ -2022,7 +2028,30 @@ function MembersAdmin() {
                         {m.emergency || "—"}
                       </td>
                       <td className="p-4 text-muted-foreground">{m.joined?.slice(0, 10) ?? "—"}</td>
-                      <td className="p-4">{regLoading ? "…" : raceCount(m.id)}</td>
+                      <td className="p-4">
+                        {regLoading ? (
+                          "…"
+                        ) : (
+                          <div className="min-w-[125px]">
+                            <div className="font-medium">{m.checkInCount}</div>
+                            {goal.needed > 0 ? (
+                              <>
+                                <div className="mt-1 text-[10px] text-muted-foreground">
+                                  {goal.needed} to {goal.next}
+                                </div>
+                                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-secondary">
+                                  <div
+                                    className="h-full rounded-full bg-primary"
+                                    style={{ width: `${Math.min(100, (m.checkInCount / goal.target) * 100)}%` }}
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="mt-1 text-[10px] text-primary">Top tier reached</div>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-4">
                         {(m as any).waiverAccepted ? (
                           <span className="inline-flex flex-col gap-0.5">
@@ -2107,7 +2136,8 @@ function MembersAdmin() {
                       </tr>
                     )}
                   </React.Fragment>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

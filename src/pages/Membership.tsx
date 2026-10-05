@@ -30,6 +30,7 @@ import {
   query,
   where,
   onSnapshot,
+  setDoc,
 } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { db } from "@/lib/firebase";
@@ -95,9 +96,22 @@ const { currentMember, state } = useStore();
 
   // Fetch profile from Firestore
   useEffect(() => {
-    if (!uid || !isMember) return;
+    if (!uid || !isMember) {
+      setProfileFetched(true);
+      return;
+    }
+    setProfileFetched(false);
     const unsub = onSnapshot(doc(db, "users", uid), (snap) => {
-      if (!snap.exists()) return;
+      if (!snap.exists()) {
+        setContact("");
+        setEmergencyName("");
+        setEmergencyNumber("");
+        setAvatarUrl(null);
+        setFirestoreTier(null);
+        setFirestoreName(null);
+        setProfileFetched(true);
+        return;
+      }
       const data = snap.data() as {
         contact?: string;
         avatarUrl?: string | null;
@@ -114,6 +128,9 @@ const { currentMember, state } = useStore();
         setEmergencyName(parts[0]?.trim() ?? "");
         setEmergencyNumber(parts[1]?.trim() ?? "");
       }
+      setProfileFetched(true);
+    }, (err) => {
+      console.error("Membership profile listener failed:", err);
       setProfileFetched(true);
     });
     return () => unsub();
@@ -213,6 +230,9 @@ const { currentMember, state } = useStore();
   const q = query(collection(db, "redemptions"), where("userId", "==", uid));
   const unsub = onSnapshot(q, (snap) => {
     setRedemptions(snap.docs.map((d) => ({ id: d.id, ...(d.data() as { rewardId: string; redeemedAt: string }) })));
+  }, (err) => {
+    console.error("Membership redemptions listener failed:", err);
+    setRedemptions([]);
   });
   return () => unsub();
 }, [uid]);
@@ -259,11 +279,12 @@ const { currentMember, state } = useStore();
 
     setSaving(true);
     try {
-      await updateDoc(doc(db, "users", uid!), {
+      await setDoc(doc(db, "users", uid!), {
         name: draftName.trim(),
+        email: user?.email ?? me?.email ?? "",
         contact: draftContact,
         emergency: `${draftEmergencyName} — ${draftEmergencyNumber}`,
-      });
+      }, { merge: true });
       if (user) await updateProfile(user, { displayName: draftName.trim() });
       setContact(draftContact);
       setEmergencyName(draftEmergencyName);
@@ -329,7 +350,7 @@ async function handleRemoveRedemption(rewardId: string) {
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(bitmap, 0, 0, w, h);
       const base64 = canvas.toDataURL("image/jpeg", 0.5);
-      await updateDoc(doc(db, "users", uid!), { avatarUrl: base64 });
+      await setDoc(doc(db, "users", uid!), { avatarUrl: base64 }, { merge: true });
       setAvatarUrl(base64);
       toast.success("Profile photo updated.");
     } catch (err) {
@@ -343,7 +364,7 @@ async function handleRemoveRedemption(rewardId: string) {
   async function handleAvatarRemove() {
     if (!uid) return;
     try {
-      await updateDoc(doc(db, "users", uid), { avatarUrl: null });
+      await setDoc(doc(db, "users", uid), { avatarUrl: null }, { merge: true });
       setAvatarUrl(null);
       toast.success("Profile photo removed.");
     } catch (err) {
@@ -426,11 +447,8 @@ async function handleRemoveRedemption(rewardId: string) {
   // Prefer live Firestore race count; fall back to store value
   const raceCount = liveRaceCount ?? me.races;
 
-  const tierThresholds: Record<Tier, number> = { Pink: 0, Silver: 12, Gold: 24, Platinum: 36 };
-  const currentTierMin = tierThresholds[effectiveMe.tier];
-  const effectiveRaceCount = Math.max(raceCount, currentTierMin);
-  const { next, needed, target } = nextTierInfo(effectiveRaceCount);
-  const progress = Math.min(100, (effectiveRaceCount / target) * 100);
+  const { next, needed, target } = nextTierInfo(raceCount);
+  const progress = Math.min(100, (raceCount / target) * 100);
   const tierOrder: Tier[] = ["Pink", "Silver", "Gold", "Platinum"];
   const myTierIndex = tierOrder.indexOf(effectiveMe.tier);
   const now = Date.now();
@@ -649,6 +667,28 @@ const redeemed = new Set(redemptions.map((r) => r.rewardId));
       <section className="mx-auto max-w-md md:max-w-6xl px-5 md:px-8 mt-16">
         <h2 className="display text-3xl">Tier progress</h2>
         <div className="mt-6 rounded-3xl border border-border bg-card p-8">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Check-ins
+              </div>
+              <div className="mt-1 display text-3xl">{raceCount}</div>
+            </div>
+            <div className="text-right">
+              {needed > 0 ? (
+                <>
+                  <div className="text-sm font-semibold text-primary">
+                    {needed} to {next}
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">
+                    {raceCount} / {target} check-ins
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm font-semibold text-primary">Top tier reached</div>
+              )}
+            </div>
+          </div>
           <div className="relative h-2 w-full rounded-full bg-secondary overflow-hidden">
             <div
               className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-accent transition-all duration-500"

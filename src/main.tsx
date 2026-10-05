@@ -5,6 +5,13 @@ import "./styles.css";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
+    if (import.meta.env.DEV) {
+      void navigator.serviceWorker
+        .getRegistration()
+        .then((registration) => registration?.unregister())
+        .catch(() => {});
+      return;
+    }
     navigator.serviceWorker.register("/sw.js").catch(() => {
       // Service workers are optional during local development.
     });

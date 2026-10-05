@@ -79,7 +79,7 @@ export default function AdvertiseBanner() {
             isBanner ? "flex-col items-stretch p-0" : "px-6 py-6"
           }`}
         >
-          <div className={isBanner ? "aspect-[4/1] w-full overflow-hidden bg-white" : "h-14 w-14 rounded-2xl bg-white flex items-center justify-center overflow-hidden shrink-0 border border-border"}>
+          <div className={isBanner ? "aspect-[4/1] w-full overflow-hidden bg-black" : "h-14 w-14 rounded-2xl bg-black flex items-center justify-center overflow-hidden shrink-0 border border-border"}>
             <img
               src={imageUrl}
               alt={slide.businessName}

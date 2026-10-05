@@ -62,7 +62,7 @@ export default function AdvertiseApply() {
 
   const [businessName, setBusinessName] = useState("");
   const [slogan, setSlogan] = useState("");
-  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("https://");
   const [contactName, setContactName] = useState(effectiveMember?.name ?? "");
   const [contactEmail, setContactEmail] = useState(effectiveMember?.email ?? authEmail ?? "");
   const [contactPhone, setContactPhone] = useState("");
@@ -98,8 +98,7 @@ export default function AdvertiseApply() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!businessName.trim()) return toast.error("Please enter your business name.");
-    if (!slogan.trim()) return toast.error("Please enter a slogan or short tagline.");
-    if (!websiteUrl.trim()) return toast.error("Please enter the website you want to advertise.");
+    if (!websiteUrl.trim()) return toast.error("Please enter a website or social media page link.");
     if (!logoUrl) return toast.error("Please upload your logo.");
     if (!memberAnswer) return toast.error("Please tell us whether you are a member.");
     if (adType === "banner" && !dimensions.trim()) {
@@ -135,8 +134,8 @@ export default function AdvertiseApply() {
       await addDoc(collection(db, "mail"), {
         to: [ADMIN_EMAIL],
         message: {
-          subject: `New advertising application ${newOrderNumber} — ${businessName}`,
-          text: `Order #: ${newOrderNumber}\nBusiness: ${businessName}\nSlogan: ${slogan}\nWebsite: ${websiteUrl}\nContact: ${contactName}\nEmail: ${contactEmail}\nPhone: ${contactPhone}\nMember: ${memberAnswer === "yes" ? "Yes" : "No"}\nAdvert type: ${adType}\nDimensions: ${dimensions}\nActivation: ${activationDate}\nExpiry: ${expiryDate}\nPrice due: R${price}/month\n\nReview and approve in the admin control room once payment is received.`,
+          subject: `New advert application ${newOrderNumber} — payment verification required`,
+          text: `A new advertising application has been submitted and is pending payment verification.\n\nOrder reference: ${newOrderNumber}\nBusiness: ${businessName}\nSlogan: ${slogan || "—"}\nWebsite or social media page: ${websiteUrl}\nContact: ${contactName}\nEmail: ${contactEmail}\nPhone: ${contactPhone}\nMember: ${memberAnswer === "yes" ? "Yes" : "No"}\nAdvert type: ${adType}\nDimensions: ${adType === "logo" ? "Logo" : dimensions}\nActivation: ${activationDate}\nExpiry: ${expiryDate}\nTerm: ${months} month(s)\nPrice: R${price}/month\n\nNext steps:\n1. Verify that payment has cleared and matches order reference ${newOrderNumber}. Check the proof of payment sent to ${ADMIN_EMAIL}.\n2. Do not approve the application until payment is verified.\n3. In Admin, open Adverts, find order ${newOrderNumber}, and click Accept. The advert will remain unpublished until approved.`,
         },
       });
 
@@ -158,8 +157,8 @@ export default function AdvertiseApply() {
         <div className="text-xs uppercase tracking-[0.3em] text-primary">Advertise with us</div>
         <h1 className="mt-3 display text-4xl md:text-6xl">Get in front of our community.</h1>
         <p className="mt-4 max-w-xl text-muted-foreground md:text-lg">
-          Your logo and slogan featured on our homepage, linking straight through to your
-          website. Apply below — spots are reviewed and confirmed manually.
+          Your logo and optional slogan featured on our homepage, linking to your website or
+          social media page. Apply below — spots are reviewed and confirmed manually.
         </p>
       </section>
 
@@ -292,9 +291,9 @@ export default function AdvertiseApply() {
             </fieldset>
 
             <Field label="Business name" value={businessName} onChange={setBusinessName} required />
-            <Field label="Slogan / tagline" value={slogan} onChange={setSlogan} required />
+            <Field label="Slogan / tagline (optional)" value={slogan} onChange={setSlogan} />
             <Field
-              label="Website to link to"
+              label="Website or social media page link"
               value={websiteUrl}
               onChange={setWebsiteUrl}
               type="url"
